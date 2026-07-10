@@ -1,0 +1,12 @@
+dumps/
+logs/
+scancode/
+scancode2/
+stats/
+venv/
+.idea/
+cloned_repos/
+__pycache__/
+ai.py
+ai2.py
+ai3.py
