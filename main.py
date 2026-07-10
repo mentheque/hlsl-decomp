@@ -61,7 +61,20 @@ from license_scanning import _walk_repo, _walk_repos, _filter_file_conclusive, _
 walked, _ = _walk_repos(config, loaded)
 permissive, gpl, nonedet, other = _sort_file_conclusive(config, _filter_file_conclusive(walked))
 
+#TODO: this needs to happen before filtering bad files out, and seems to had been happening there before.
+# also, add license information in there too.
+from analyse_file import update_stats, load_repo_stats
+for repo, file_jsons in (permissive + gpl + nonedet + other):
+  update_stats(config, repo, [fj[0] for fj in file_jsons], recalculate=True)
+  repo_stats = load_repo_stats(config, repo)
+  for file, stat in repo_stats.items():
+    print(f"File: {file}")
+    print(stat['platforms'])
 
+    print("Includes: ")
+    for include in stat['includes']:
+      if include in repo_stats:
+        print(repo_stats[include]['platforms'])
 
 print(f"permissive: {len(flatten_removing_repos(permissive))}, gpl : {len(flatten_removing_repos(gpl))} "
       f"None: {len(flatten_removing_repos(nonedet))}, other: {len(flatten_removing_repos(other))}")

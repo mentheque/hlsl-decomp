@@ -13,3 +13,6 @@ class Repository:
     self.clone_url = clone_url
     self.blobs_url = blobs_url
     self.default_branch = default_branch
+
+def file_name(file_json):
+  return file_json["path"].split('/')[-1]

@@ -199,6 +199,7 @@ def _sort_file_conclusive(config : Config, file_conclusive):
 
   return clear_permissive, clear_gpl, failed_to_detect_any, non_permissive_or_unclear
 
+# from [(repo, [(file, license)])] to [(file, license)]
 def flatten_removing_repos(list_w_repos):
   return [shader for _, repo_shaders in list_w_repos for shader in repo_shaders]
 
