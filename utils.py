@@ -16,3 +16,10 @@ class Repository:
 
 def file_name(file_json):
   return file_json["path"].split('/')[-1]
+
+def extention_case_variations(filename : str):
+  split = filename.split('.')
+  if len(split) > 1:
+    return ['.'.join(split[:-1] + [ext]) for ext in [split[-1].upper(), split[-1].lower()]]
+  else:
+    return [filename]

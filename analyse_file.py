@@ -76,7 +76,8 @@ _pcontents_patterns = _compile_dict_patterns(
     'Unity'   : [(r'(CG|HLSL)PROGRAM', 0.9),
                  (r'#pragma\s+(vertex|fragment|geometry|hull|domain|compute)', 0.9),
                  (r'UNITY_[A-Z_]+', 0.9),
-                 (r'CBUFFER_(START|END)', 0.8)],
+                 (r'CBUFFER_(START|END)', 0.8),
+                 (r'com.unity', 0.8)],
     'Ogre3D'  : [(r'#include\s*<OgreUnifiedShader\.h>', 0.9)],
     'MS FX'   : [(r'^\s*technique(10|11)?\s+[a-zA-Z_][a-zA-Z0-9_]*\s*\{', 0.9),
                  (r'^\s*pass\s+[a-zA-Z_][a-zA-Z0-9_]*\s*\{', 0.9),
@@ -109,6 +110,8 @@ def _test_categorical_patterns(categories, filename_patterns, contents_patterns,
 def _test_platforms(filename : str, file_contents: str):
   return _test_categorical_patterns(_platforms, _pfilename_patterns, _pcontents_patterns, filename, file_contents)
 
+def _is_target_extention(config: Config, filename):
+  return any(pattern.match(filename) for pattern in config.target_extension_patterns)
 
 from license_scanning import file_path
 from utils import file_name
@@ -118,16 +121,23 @@ from utils import file_name
 def _calculate_file_stats(config : Config, repo : Repository, file_json):
   filepath = file_path(config, repo, file_json)
   normalised_contents = _normalise(filepath)
+  filename = file_name(file_json)
   return {
     'hash': _hash(normalised_contents),
     'size': filepath.stat().st_size,
     'lines': len(normalised_contents.split('\n')),
-    'platforms': _test_platforms(file_name(file_json), normalised_contents)
+    'platforms': _test_platforms(filename, normalised_contents),
+    'is_shader': _is_target_extention(config, filename),
+    'case_sensitive_path' : file_json['path']
   }
 
 
 import os
 from pathlib import Path
+from utils import extention_case_variations
+
+# Creates flat lists of all includes for all the files in the current repository,
+# Containing all (possibly) included files from the same repository
 def _includes_list(config : Config, repo : Repository, file_jsons):
   includes = {}
 
@@ -135,20 +145,41 @@ def _includes_list(config : Config, repo : Repository, file_jsons):
   for file_json in file_jsons:
     filepath = file_path(config, repo, file_json)
     relative_dir = os.path.dirname(file_json['path'])
-    incset = includes[file_json['path']] = set()
+    # Again, some repos expect case-insensitivity for includes, so making all lower.
+    incset = includes[_file_key(file_json)] = set()
     normalised_contents = ""
     try:
       normalised_contents = _normalise(filepath)
     except Exception as e:
       normalised_contents = ""
 
+    # To handle blocks of cpp includes.
+    ifstack = [True]
+
     for line in normalised_contents.split('\n'):
       stripped = line.strip()
-      if stripped.startswith("#include"):
+      if stripped.startswith("#if"):
+        if re.match(r'#ifdef\s+__cplusplus\b', stripped):
+          ifstack.append(False)
+        elif re.match(r'^\s*#ifndef\s+__cplusplus\b', stripped):
+          ifstack.append(True)
+        else:
+          ifstack.append(ifstack[-1])
+      elif stripped.startswith('#endif'):
+        ifstack.pop()
+        if len(ifstack) == 0:
+          config.log.licenses.primary(f"File {filepath} has broken #if directive hierarchy. Aborting include search.")
+          break
+      elif ifstack[-1] and stripped.startswith("#include"):
         match = re.search(r'#include\s*"([^"]+)"|#include\s*<([^>]+)>', stripped)
         if match:
           inc_path = match.group(1) if match.group(1) else match.group(2)
-          incset.add(Path(os.path.normpath(os.path.join(relative_dir, inc_path))).as_posix())
+          # Again, some repos expect case-insensitivity for includes, so making all lower.
+          incset.add(
+            _make_file_key(
+              Path(os.path.normpath(os.path.join(relative_dir, inc_path))).as_posix()
+            )
+          )
 
   updated = True
   while updated:
@@ -189,6 +220,14 @@ def _save_repo_stats(config : Config, repo : Repository, repo_stats):
     json.dump(repo_stats, f)
 
 
+def _make_file_key(file_path : str):
+  return file_path.lower()
+
+
+def _file_key(file_json):
+  return _make_file_key(file_json['path'])
+
+
 # Where to get jsons?
 def update_stats(config : Config, repo : Repository, file_jsons, recalculate : bool = False):
   repo_stats = {}
@@ -210,7 +249,9 @@ def update_stats(config : Config, repo : Repository, file_jsons, recalculate : b
   changed = False
   failed = []
   for file_json in file_jsons:
-    file_key = file_json['path']
+    # Code is primarily written for and on Windows I guess, so some files expect
+    # case-insensitive include logic, so adding that here.
+    file_key = _file_key(file_json)
     if (file_key in repo_stats and recalculate) or file_key not in repo_stats:
       try:
         repo_stats[file_key] = _calculate_file_stats(config, repo, file_json)
@@ -223,9 +264,11 @@ def update_stats(config : Config, repo : Repository, file_jsons, recalculate : b
         failed.append(file_json)
 
   for file_json in file_jsons:
-    file_key = file_json['path']
-    _merge_stats_with_includes(file_key)
-    changed = True # I guess it's always True now, whatever
+    file_key = _file_key(file_json)
+    # To not go over failed files
+    if file_key in repo_stats:
+      _merge_stats_with_includes(file_key)
+      changed = True # I guess it's always True now, whatever
 
   config.log.licenses.primary(f"Stats for {repo.name},"
                               f" total {len(file_jsons)},"

@@ -59,22 +59,43 @@ from license_scanning import _walk_repo, _walk_repos, _filter_file_conclusive, _
   flatten_removing_repos
 
 walked, _ = _walk_repos(config, loaded)
-permissive, gpl, nonedet, other = _sort_file_conclusive(config, _filter_file_conclusive(walked))
 
-#TODO: this needs to happen before filtering bad files out, and seems to had been happening there before.
+# This needs to happen before filtering bad files out, and seems to had been happening there before.
 # also, add license information in there too.
 from analyse_file import update_stats, load_repo_stats
-for repo, file_jsons in (permissive + gpl + nonedet + other):
+from utils import extention_case_variations
+
+
+for repo, file_jsons in walked:
   update_stats(config, repo, [fj[0] for fj in file_jsons], recalculate=True)
   repo_stats = load_repo_stats(config, repo)
   for file, stat in repo_stats.items():
-    print(f"File: {file}")
+    if 'is_shader' not in stat.keys():
+      continue
+
+    if not stat['is_shader']:
+      continue
+
+    print(f"File: {repo_dir(config, repo)}/{file}")
     print(stat['platforms'])
 
     print("Includes: ")
     for include in stat['includes']:
+      print(include)
       if include in repo_stats:
-        print(repo_stats[include]['platforms'])
+          found = True
+          print(repo_stats[include]['platforms'])
+      else:
+        # NOTE:
+        # - made include search case-insensitive as may be expected
+        # - search for includes correctly handles #ifdef __cplusplus and related directives
+        # - Some libraries will still fail, as there is hardly a way to find intended -I compiler flag if not by hand.
+        # - Also, some people apparently use .psh and .vsh, but for the files already downloaded this has been a problem
+        # For a single repository only. So safe to say it's either not very popular or styles don't intersect.
+        # Since I don't want to guess the language of any specific file, I will live such ambiguous extensions out.
+        print("!!! WARNING: include not analysed !!!")
+
+permissive, gpl, nonedet, other = _sort_file_conclusive(config, _filter_file_conclusive(walked))
 
 print(f"permissive: {len(flatten_removing_repos(permissive))}, gpl : {len(flatten_removing_repos(gpl))} "
       f"None: {len(flatten_removing_repos(nonedet))}, other: {len(flatten_removing_repos(other))}")

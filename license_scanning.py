@@ -73,10 +73,6 @@ def _walk_repo(config : Config, repo : Repository):
   config.log.licenses.primary(f"Establishing license hierarchy in {repo.name}")
   scancode = load_scancode(config, repo)
 
-  def is_shader(filename):
-    return any(pattern.match(filename) for pattern in config.target_extension_patterns)
-
-
   shaders = []
 
   licenses_by_dir = {}
@@ -110,12 +106,13 @@ def _walk_repo(config : Config, repo : Repository):
 
   for file in scancode['files']:
     if file["type"] == "file":
-      if is_shader(file["path"]):
-        applicable_licenses = find_closest_licenses(os.path.dirname(file["path"]))
-        if file["detected_license_expression"] is not None:
-          applicable_licenses = [file]
+      # Includes may not all be shader files, so best not to filter for that here.
+      #if is_shader(file["path"]):
+      applicable_licenses = find_closest_licenses(os.path.dirname(file["path"]))
+      if file["detected_license_expression"] is not None:
+        applicable_licenses = [file]
 
-        shaders.append((file, applicable_licenses))
+      shaders.append((file, applicable_licenses))
 
   return shaders
 
