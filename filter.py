@@ -38,6 +38,35 @@ def new_filter_file_extensions(target_extensions):
 
   return filter
 
+def _filter_matches_categorical(categorical_type, target_categorical):
+  def filter(repo_stats, file_json):
+    categorical = file_stats(repo_stats, file_json)[categorical_type]
+    return not (target_categorical in categorical and categorical[target_categorical] > 0)
+
+  return filter
+
+def new_filter_platform(target_platform):
+  return _filter_matches_categorical('platforms', target_platform)
+
+def new_filter_shader_type(target_type):
+  return _filter_matches_categorical('shader_type', target_type)
+
+def _no_categorical_detected(categorical_type):
+  def filter(repo_stats, file_json):
+    categorical = file_stats(repo_stats, file_json)[categorical_type]
+    return any(cat_value > 0 for cat_value in categorical.values())
+
+  return filter
+
+def new_no_platform():
+  return _no_categorical_detected('platforms')
+
+def filter_is_shader(repo_stats, file_json):
+  stats = file_stats(repo_stats, file_json)
+  return not ("is_shader" in stats and stats['is_shader'])
+
+def new_no_shader_type():
+  return _no_categorical_detected('shader_type')
 
 def filter(config : Config, walked, filters):
   filtered = []

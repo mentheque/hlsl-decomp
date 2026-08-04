@@ -110,6 +110,69 @@ def _test_categorical_patterns(categories, filename_patterns, contents_patterns,
 def _test_platforms(filename : str, file_contents: str):
   return _test_categorical_patterns(_platforms, _pfilename_patterns, _pcontents_patterns, filename, file_contents)
 
+_shader_types = ["pixel", "vertex", "compute"]
+_stfilename_patterns = _compile_dict_patterns({
+  "pixel": [(r'\.ps', 0.9),
+            (r'\.pixel', 0.9),
+            (r'ps_', 0.9),
+            (r'pixel_', 0.8),
+            (r'_ps2x', 0.8)],
+  "vertex": [
+    (r'\.vs', 0.9),
+    (r'\.vert', 0.9),
+    (r'\.vertex', 0.9),
+    (r'\.vsh', 0.9),
+    (r'vs_', 0.9),
+    (r'vert_', 0.9),
+    (r'vertex_', 0.8)
+  ],
+  "compute" : [
+    (r'\.cs', 0.9),
+    (r'\.compute', 0.9),
+    (r'\.csh', 0.9),
+    (r'cs_', 0.9),
+    (r'csh_', 0.9),
+    (r'compute_', 0.8)
+  ]
+})
+
+_stcontents_patterns = _compile_dict_patterns({
+  "pixel": [
+    (r':\s*SV_Target\b', 0.95),
+    (r':\s*SV_Target\d+\b', 0.95),
+    (r':\s*SV_Target\s*\[\s*\d+\s*\]', 0.95),
+    (r'\b(discard|kill)\s*[;\(]', 0.89),
+    (r'\b(Clip|Discard)\s*\(', 0.89),
+    (r':\s*SV_Depth\b', 0.88),
+    (r':\s*SV_DepthGreater\b', 0.88),
+    (r':\s*SV_DepthLessEqual\b', 0.88),
+  ],
+  "vertex": [
+    (r':\s*SV_VertexID\b', 0.9),
+    (r':\s*SV_InstanceID\b', 0.9),
+    (r':\s*BLENDWEIGHT\b', 0.89),
+    (r':\s*BLENDINDICES\b', 0.89),
+    (r':\s*BLENDWEIGHT\d+\b', 0.89),
+    (r':\s*BLENDINDICES\d+\b', 0.89),
+    (r'(in|inout)\s+\w+\s+\w+\s*:\s*POSITION\b', 0.88),
+  ],
+  "compute" : [
+    (r'\[numthreads\s*\(', 0.95),
+    (r':\s*SV_DispatchThreadID\b', 0.9),
+    (r':\s*SV_GroupThreadID\b', 0.9),
+    (r':\s*SV_GroupID\b', 0.9),
+    (r':\s*SV_GroupIndex\b', 0.9),
+    (r'\bgroupshared\b', 0.9),
+    (r'GroupMemoryBarrierWithGroupSync\s*\(', 0.9),
+    (r'DeviceMemoryBarrierWithGroupSync\s*\(', 0.9),
+    (r'AllMemoryBarrierWithGroupSync\s*\(', 0.9),
+    (r'GroupMemoryBarrier\s*\(', 0.9),
+  ]
+})
+
+def _test_shader_types(filename : str, file_contents: str):
+  return _test_categorical_patterns(_shader_types, _stfilename_patterns, _stcontents_patterns, filename, file_contents)
+
 def _is_target_extention(config: Config, filename):
   return any(pattern.match(filename) for pattern in config.target_extension_patterns)
 
@@ -127,6 +190,7 @@ def _calculate_file_stats(config : Config, repo : Repository, file_json):
     'size': filepath.stat().st_size,
     'lines': len(normalised_contents.split('\n')),
     'platforms': _test_platforms(filename, normalised_contents),
+    'shader_type': _test_shader_types(filename, normalised_contents),
     'is_shader': _is_target_extention(config, filename),
     'case_sensitive_path' : file_json['path']
   }

@@ -78,29 +78,31 @@ for repo, file_jsons in walked:
 
     print(f"File: {repo_dir(config, repo)}/{file}")
     print(stat['platforms'])
-
-    print("Includes: ")
-    for include in stat['includes']:
-      print(include)
-      if include in repo_stats:
-          found = True
-          print(repo_stats[include]['platforms'])
-      else:
-        # NOTE:
-        # - made include search case-insensitive as may be expected
-        # - search for includes correctly handles #ifdef __cplusplus and related directives
-        # - Some libraries will still fail, as there is hardly a way to find intended -I compiler flag if not by hand.
-        # - Also, some people apparently use .psh and .vsh, but for the files already downloaded this has been a problem
-        # For a single repository only. So safe to say it's either not very popular or styles don't intersect.
-        # Since I don't want to guess the language of any specific file, I will live such ambiguous extensions out.
-        print("!!! WARNING: include not analysed !!!")
+    print(stat['shader_type'])
+    #
+    # print("Includes: ")
+    # for include in stat['includes']:
+    #   print(include)
+    #   if include in repo_stats:
+    #       found = True
+    #       print(repo_stats[include]['platforms'])
+    #   else:
+    #     # NOTE:
+    #     # - made include search case-insensitive as may be expected
+    #     # - search for includes correctly handles #ifdef __cplusplus and related directives
+    #     # - Some libraries will still fail, as there is hardly a way to find intended -I compiler flag if not by hand.
+    #     # - Also, some people apparently use .psh and .vsh, but for the files already downloaded this has been a problem
+    #     # For a single repository only. So safe to say it's either not very popular or styles don't intersect.
+    #     # Since I don't want to guess the language of any specific file, I will live such ambiguous extensions out.
+    #     print("!!! WARNING: include not analysed !!!")
 
 permissive, gpl, nonedet, other = _sort_file_conclusive(config, _filter_file_conclusive(walked))
 
 print(f"permissive: {len(flatten_removing_repos(permissive))}, gpl : {len(flatten_removing_repos(gpl))} "
       f"None: {len(flatten_removing_repos(nonedet))}, other: {len(flatten_removing_repos(other))}")
 
-from filter import filter, new_filter_size, new_filter_line_count, new_filter_unique_hash, filter_has_stats
+from filter import filter, new_filter_size, new_filter_line_count, new_filter_unique_hash, filter_has_stats,\
+  filter_is_shader
 
 permissive, gpl, nonedet, other = filter(config, permissive, [filter_has_stats, new_filter_unique_hash(config)]),\
   filter(config, gpl, [filter_has_stats, new_filter_unique_hash(config)]),\
@@ -117,6 +119,7 @@ permissive, gpl, nonedet, other = _sort_file_conclusive(config,
                                                      joint,
                                                      [
                                                        filter_has_stats,
+                                                       filter_is_shader,
                                                        new_filter_line_count(min_lines=0),
                                                        new_filter_size(min_size=1024*0),
                                                        new_filter_unique_hash(config)]))
@@ -124,10 +127,36 @@ permissive, gpl, nonedet, other = _sort_file_conclusive(config,
 print(f"permissive: {len(flatten_removing_repos(permissive))}, gpl : {len(flatten_removing_repos(gpl))} "
       f"None: {len(flatten_removing_repos(nonedet))}, other: {len(flatten_removing_repos(other))}")
 
-from filter import new_filter_file_extensions
+from filter import new_filter_file_extensions, new_filter_platform, new_filter_shader_type, new_no_platform,\
+  new_no_shader_type
 
 for spisok, name in [(permissive, "permissive"), (nonedet, "None"), (other, "other"), (gpl, "gpl")]:
+  print(f"------ {name} ---------")
+  from analyse_file import _platforms, _shader_types
+  for platform in (_platforms + ["no"]):
+    platform_specific = []
+    if platform == "no":
+      platform_specific =  filter(config, spisok, [new_no_platform()])
+    else:
+      platform_specific = filter(config, spisok, [new_filter_platform(platform)])
+    print(f"++ {platform}: {len(flatten_removing_repos(platform_specific))}")
+    for shader_type in (_shader_types + ["no"]):
+      filters = []
+      if shader_type == "no":
+        filters = [new_no_shader_type()]
+      else:
+        filters = [new_filter_shader_type(shader_type)]
+      print(f"{shader_type}: "
+            f"{len(flatten_removing_repos(filter(config, platform_specific, filters)))}")
+
   print(f"{name}, cginc: {len(flatten_removing_repos(filter(config, spisok, [ new_filter_file_extensions(['cginc'])])))}")
   print(f"{name}, unreal: {len(flatten_removing_repos(filter(config, spisok, [ new_filter_file_extensions(['ush', 'usf'])])))}")
   print(f"{name}, hlsl(i): {len(flatten_removing_repos(filter(config, spisok, [ new_filter_file_extensions(['hlsl', 'hlsli'])])))}")
   print(f"{name}, fx(h): {len(flatten_removing_repos(filter(config, spisok, [ new_filter_file_extensions(['fx', 'fxh'])])))}")
+
+
+permissive_none_detected = filter(config, permissive, [new_no_platform(), new_no_shader_type()])
+print("-------- Permissive files with no type detected -----------")
+for repo, file_jsons in permissive_none_detected:
+  for file_json in file_jsons:
+    print(f"{repo_dir(config, repo)}/{file_json[0]['path']}")
