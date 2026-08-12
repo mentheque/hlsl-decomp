@@ -1,5 +1,6 @@
 import re
 from enum import Enum
+import json
 
 from logs import Logger, NotLogger
 
@@ -28,12 +29,21 @@ class LicenseType:
 
 # TODO: split extensions into source/not source
 class Config:
+  _DEFAULT_VALUES = {
+    'additional_file_extensions' : [],
+    'repository_list_dir' : "dumps",
+    'git_directory':  "cloned_repos",
+    'scancode_processes': 2,
+    'scancode_cache_dir': "scancode",
+    'licenses': [],
+    'shader_stats_dir': "stats"
+  }
   def __init__(self,
                language,
                github_token,
                target_file_extensions,
-               additional_file_extensions,
                log : MultiModuleLogger,
+               additional_file_extensions = [],
                repository_list_dir = "dumps",
                git_directory = "cloned_repos",
                scancode_processes = 2,
@@ -63,3 +73,123 @@ class Config:
     self.download_extensions_patterns = \
       [re.compile(f'.*\\.{re.escape(ext)}$', re.IGNORECASE)
        for ext in self.file_extensions + self.additional_file_extensions]
+
+
+from logs import EchoLogger, PrefixedLogger
+def load_config(path ='config.json') -> Config:
+  def errorExit(message: str):
+    print("+ Error: " + message)
+    print(f"Expected config json location: {path}")
+    print("For contents reference visit gitlab")
+    raise Exception("Unable to load config")
+
+
+  print(f"+ Loading config from {path}")
+  try:
+    with open(path, 'r') as file:
+      config_json = json.load(file)
+
+  except FileNotFoundError:
+    errorExit("File not found")
+  except json.JSONDecodeError:
+    errorExit("Invalid JSON format")
+  except Exception as e:
+    errorExit(f"{e}")
+
+  if not _verifyers['config'](config_json):
+    errorExit("Failed to verify json contents against expected schema")
+
+  def get(key):
+    return config_json[key]
+  def get_or_default(key):
+    return config_json.get(key, Config._DEFAULT_VALUES[key])
+
+  return Config(
+    language=get('language'),
+    github_token=get('github_token'),
+    target_file_extensions=get('target_file_extensions'),
+    log = MultiModuleLogger(PrefixedLogger("default", EchoLogger(filepath="logs/default_logs.txt"))), # For now
+    additional_file_extensions = get_or_default('additional_file_extensions'),
+    repository_list_dir = get_or_default('repository_list_dir'),
+    git_directory = get_or_default('git_directory'),
+    scancode_processes = get_or_default('scancode_processes'),
+    scancode_cache_dir = get_or_default('scancode_cache_dir'),
+    licenses = [LicenseType(
+      ltj['name'],
+      ltj['gh_search_name'],
+      ltj['unique_prefix'],
+      (LicenseGroup.Permissive if ltj['group'] == 'Permissive' else LicenseGroup.GPL)
+    ) for ltj in get_or_default('licenses')],
+    shader_stats_dir = get_or_default('shader_stats_dir')
+  )
+
+
+def _type_verifier(type):
+  return (lambda x : isinstance(x, type))
+
+def _list_verifier(member_verifier_key):
+  return (lambda l: isinstance(l, list) and all(_verifyers[member_verifier_key](mem) for mem in l))
+
+def _schema_verifier(schema, optionals_schema):
+  def inner(js):
+    errors = []
+
+    for key in schema.keys():
+      if not key in js:
+        errors.append(f"Missing {key} key")
+
+    def verify_what_present(source):
+      for key in source.keys():
+        if key in js and not _verifyers[source[key]](js[key]):
+          errors.append(f"Failed to verify {key}. Expecting {source[key]}")
+
+    verify_what_present(schema)
+    verify_what_present(optionals_schema)
+
+    if len(errors) > 0:
+      for err in errors:
+        print(err)
+      return False
+
+    return True
+
+
+  return inner
+
+def _specific_values_verifier(permitted_values):
+  return (lambda v : v in permitted_values)
+
+_str_verifier = _type_verifier(str)
+
+_verifyers = {
+  'str' : _str_verifier,
+  'int' : _type_verifier(int),
+  'str_list' : _list_verifier('str'),
+  'licence_group' : _specific_values_verifier(["Permissive", "GPL"]),
+  'license_type' : _schema_verifier(
+    {
+      'name' : 'str',
+      'gh_search_name' : 'str',
+      'unique_prefix' : 'str',
+      'group' : 'licence_group'
+    },
+    {}
+  ),
+  'license_type_list' : _list_verifier('license_type'),
+  'config' : _schema_verifier(
+    {
+      'language' : 'str',
+      'github_token' : 'str',
+      'target_file_extensions' : 'str_list'
+    },
+    {
+      'additional_file_extensions' : 'str_list',
+      'repository_list_dir' : 'str',
+      'git_directory' : 'str',
+      'scancode_processes' : 'int',
+      'scancode_cache_dir' : 'str',
+      'licenses' : 'license_type_list',
+      'shader_stats_dir' : 'str'
+    }
+  )
+}
