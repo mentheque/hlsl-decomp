@@ -1,7 +1,3 @@
-LANGUAGE = "hlsl"
-GITHUB_TOKEN = "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"
-
-WORKING_DIR = "./cloned_repos"
 
 from github import Github, Auth
 from pathlib import Path
@@ -17,7 +13,7 @@ def _init_github(config : Config) -> Github:
   if config.github_token is None:
     config.log.github.primary("Missing authentication token (reduced limits)")
 
-  auth = Auth.Token(GITHUB_TOKEN) if GITHUB_TOKEN else None
+  auth = Auth.Token(config.github_token) if config.github_token else None
   return Github(auth=auth) if auth else Github()
 
 
@@ -186,3 +182,27 @@ def _top_starred_rlist_path(config : Config):
 
 def _selected_licenses_rlist_path(config : Config):
   return _dump_file_path(config, 'selected_licenses_list.json')
+
+from enum import Enum
+class RepositoryLists(Enum):
+  Full = 1
+  TopStarred = 2
+  SelectedLicenses = 3
+
+_loaders = {
+  RepositoryLists.Full : load_full_rlist,
+  RepositoryLists.TopStarred : load_top_starred_rlist,
+  RepositoryLists.SelectedLicenses : load_selected_licenses_rlist
+}
+
+_gh_getters = {
+  RepositoryLists.Full: gh_full_repository_list,
+  RepositoryLists.TopStarred: gh_top_stars,
+  RepositoryLists.SelectedLicenses: gh_selected_licenses
+}
+
+def load(config : Config, rlist : RepositoryLists):
+  return _loaders[rlist](config)
+
+def gh_get(config : Config, rlist : RepositoryLists):
+  return _gh_getters[rlist](config)

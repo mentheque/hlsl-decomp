@@ -27,7 +27,6 @@ class LicenseType:
     self.unique_prefix = unique_prefix
     self.group = group
 
-# TODO: split extensions into source/not source
 class Config:
   _DEFAULT_VALUES = {
     'additional_file_extensions' : [],

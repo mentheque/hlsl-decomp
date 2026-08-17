@@ -1,8 +1,9 @@
 from config import Config
 from utils import Repository
 
+from analyse_file import _file_key
 def filter_has_stats(repo_stats, file_json):
-  return file_json['path'] not in repo_stats
+  return _file_key(file_json) not in repo_stats
 
 def _filter_between(value, min_value, max_value):
   return (min_value is not None and value < min_value) or (max_value is not None and value > max_value)
@@ -33,7 +34,7 @@ def new_filter_unique_hash(config : Config):
 
 def new_filter_file_extensions(target_extensions):
   def filter(repo_stats, file_json):
-    path_str = file_json['path']
+    path_str = file_json['path'].lower()
     return not any(path_str.endswith('.' + extension) for extension in target_extensions)
 
   return filter

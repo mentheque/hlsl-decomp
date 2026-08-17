@@ -342,4 +342,4 @@ def update_stats(config : Config, repo : Repository, file_jsons, recalculate : b
     _save_repo_stats(config, repo, repo_stats)
 
 def file_stats(repo_stats, file_json):
-  return repo_stats[file_json['path']]
+  return repo_stats[_file_key(file_json)]

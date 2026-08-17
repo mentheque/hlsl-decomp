@@ -1,7 +1,7 @@
 _invalid_answer_limit = 3
 
 # Asks y/n question if optionList not specified, else numerical choice.
-# Defaults to 0 on {_invalid_answer_limit} invalid answers
+# Defaults to -1 on {_invalid_answer_limit} invalid answers
 def query(message: str, optionList=None) -> int:
   appendix = "? (y/n)"
   validAnswers = ['y', 'n']
@@ -21,5 +21,20 @@ def query(message: str, optionList=None) -> int:
         return int(received == 'y')
     else:
       print(f"expected {f'0-{len(optionList) - 1}' if numberedChoice else 'y/n'}")
-  print(f"Failed to receive valid input. Defaulting to {0 if numberedChoice else 'no'}")
-  return 0
+  print(f"Failed to receive valid input.")
+  return -1
+
+def invalid_to_no(qresult):
+  return 0 if qresult < 0 else qresult
+
+def no_to_invalid(qresult):
+  return -1 if qresult == 0 else qresult
+
+def terminate(message : str, code = 1):
+  print(message + ". Terminating.")
+  exit(code)
+
+def terminate_on_fail(query_result : int, message : str, code = 1):
+  if query_result < 0 :
+    terminate(message, code)
+  return query_result

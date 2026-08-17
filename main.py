@@ -84,6 +84,10 @@ for repo, file_jsons in walked:
     print(f"File: {repo_dir(config, repo)}/{file}")
     print(stat['platforms'])
     print(stat['shader_type'])
+
+    if stat['platforms']['Ogre3D'] > 0:
+      print(stat)
+
     #
     # print("Includes: ")
     # for include in stat['includes']:
