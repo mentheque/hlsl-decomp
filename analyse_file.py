@@ -269,10 +269,18 @@ def _repo_shader_stats_file(config : Config, repo : Repository):
   # that's unlikely enough for me not to bother, and I don't whant more directory hirarchy.
   return join_path(config.shader_stats_dir, repo.full_name.replace('/', '_') + '.json')
 
+
+_license_fields = ['license', 'worst_included_license']
 def load_repo_stats(config : Config, repo : Repository):
+
   try:
     with open(_repo_shader_stats_file(config, repo), "r") as f:
-      return json.load(f)
+      loaded = json.load(f)
+      for license_field in _license_fields:
+        for file_loaded in loaded.values():
+          if license_field in file_loaded:
+            file_loaded[license_field] = LicenseGroup(file_loaded[license_field])
+      return loaded
   except Exception as e:
     config.log.licenses.primary(f"Unable to load {repo.full_name} stats, returning empty")
     return {}
@@ -280,6 +288,11 @@ def load_repo_stats(config : Config, repo : Repository):
 def _save_repo_stats(config : Config, repo : Repository, repo_stats):
   path = _repo_shader_stats_file(config, repo)
   path.parent.mkdir(parents=True, exist_ok=True)
+  for file_stat in repo_stats.values():
+    for license_field in _license_fields:
+      if license_field in file_stat:
+        file_stat[license_field] = file_stat[license_field].value
+
   with open(_repo_shader_stats_file(config, repo), "w") as f:
     json.dump(repo_stats, f)
 
@@ -292,8 +305,7 @@ def _file_key(file_json):
   return _make_file_key(file_json['path'])
 
 
-# Where to get jsons?
-def update_stats(config : Config, repo : Repository, file_jsons, recalculate : bool = False):
+def update_basic_stats(config : Config, repo : Repository, file_jsons, recalculate : bool = False):
   repo_stats = {}
   def _merge_stats_with_includes(file_key):
     file_stats = repo_stats[file_key]
@@ -339,6 +351,35 @@ def update_stats(config : Config, repo : Repository, file_jsons, recalculate : b
                               f" success: {len(file_jsons) - len(failed)}, failed: {len(failed)}")
 
   if changed:
+    _save_repo_stats(config, repo, repo_stats)
+
+from license_scanning import _sort_file_conclusive, _filter_file_conclusive
+from config import LicenseGroup
+def calculate_license_stats(config : Config, walked):
+  permissive, gpl, nonedet, other = \
+    _sort_file_conclusive(config, _filter_file_conclusive(walked, store_empty_repos=True), store_empty_repos=True)
+  for i in range(len(permissive)):
+    repo = walked[i][0]
+    repo_stats = load_repo_stats(config, repo)
+
+    # Some files from file_jsons may be missing if errored on basic stat calculations, so ignoring them here
+    for file_stat in repo_stats.values():
+      file_stat['license'] = LicenseGroup.Inconclusive # For files with license tracing to
+      # several (0) equal sources. For others will be overwritten. Technically can be determined directly already here,
+      # but this works too.
+
+    for license_group, repos_n_files in [(LicenseGroup.Permissive, permissive), (LicenseGroup.GPL, gpl),
+                                         (LicenseGroup.Undetected, nonedet), (LicenseGroup.Other, other)]:
+      for file_json, _ in repos_n_files[i][1]:
+        # Some files from file_jsons may be missing if errored on basic stat calculations, so ignoring them here
+        if _file_key(file_json) in repo_stats:
+          file_stats(repo_stats, file_json)['license'] = license_group
+
+    for file_stat in repo_stats.values():
+      file_stat['worst_included_license'] = \
+        max([repo_stats[included]['license'] if included in repo_stats else LicenseGroup.ExternalFile
+             for included in file_stat['includes']], key=lambda m: m.value, default=LicenseGroup.NoIncludes)
+
     _save_repo_stats(config, repo, repo_stats)
 
 def file_stats(repo_stats, file_json):

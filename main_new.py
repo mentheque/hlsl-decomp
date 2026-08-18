@@ -42,6 +42,7 @@ if invalid_to_no(query("List is loaded. (Re)download files and scan for licenses
   from git_utils import clone_license_named_and_target_files, repo_dir
   from license_scanning import scancode_and_cache
 
+  #TODO: real number
   for i in range(2):
     repo = rlist[i]
     try:
@@ -56,23 +57,33 @@ from license_scanning import _walk_repos, _filter_file_conclusive, _sort_file_co
 
 walked, _ = _walk_repos(config, rlist)
 
-from analyse_file import update_stats, load_repo_stats
+from analyse_file import update_basic_stats, load_repo_stats
 
 if recalc_stats:
   for repo, file_jsons in walked:
-    update_stats(config, repo, [fj[0] for fj in file_jsons], recalculate=recalc_stats)
+    update_basic_stats(config, repo, [fj[0] for fj in file_jsons], recalculate=recalc_stats)
+
+for repo, file_jsons in walked[0:4]:
+  update_basic_stats(config, repo, [fj[0] for fj in file_jsons], recalculate=True)
+
+from analyse_file import calculate_license_stats
+calculate_license_stats(config, walked)
+
+# for repo, file_jsons in walked:
+#   stats = load_repo_stats(config, repo)
+#   for stat in stats:
+#     print(stat)
+
+from git_utils import repo_commit_sha
+from utils import reponameless_path
+
+#for repo, file_jsons in walked:
+ # blob_prefix = repo.blobs_url.replace("{/sha}", '/' + repo_commit_sha(config, repo)) + '/'
+  #for file_json, _ in file_jsons:
+    #print(blob_prefix + reponameless_path(file_json))
+
 
 conc = _filter_file_conclusive(walked)
-
-for repo, file_jsons in conc:
-  if recalc_stats:
-    update_stats(config, repo, [fj[0] for fj in file_jsons], recalculate=recalc_stats)
-  repo_stats = load_repo_stats(config, repo)
-
-  for file, stat in repo_stats.items():
-    if stat['platforms']['Ogre3D'] > 0:
-      print("Post conclusive", stat)
-
 
 from filter import filter, new_filter_size, new_filter_line_count, new_filter_unique_hash, filter_has_stats,\
   filter_is_shader
@@ -82,7 +93,7 @@ filtered = filter(config, conc, [filter_has_stats, filter_is_shader, new_filter_
 
 for repo, file_jsons in filtered:
   if recalc_stats:
-    update_stats(config, repo, [fj[0] for fj in file_jsons], recalculate=recalc_stats)
+    update_basic_stats(config, repo, [fj[0] for fj in file_jsons], recalculate=recalc_stats)
   repo_stats = load_repo_stats(config, repo)
 
   for file, stat in repo_stats.items():
@@ -97,7 +108,10 @@ print(f"permissive: {len(flatten_removing_repos(permissive))}, gpl : {len(flatte
 from filter import new_filter_file_extensions, new_filter_platform, new_filter_shader_type, new_no_platform,\
   new_no_shader_type
 
-for spisok, name in [(permissive, "permissive"), (nonedet, "None"), (other, "other"), (gpl, "gpl")]:
+from config import LicenseGroup
+for spisok, name, expectedLT in [(permissive, "permissive", LicenseGroup.Permissive),
+                     (nonedet, "None", LicenseGroup.Undetected), (other, "other", LicenseGroup.Other),
+                     (gpl, "gpl", LicenseGroup.GPL)]:
   print(f"------ {name} ---------")
   from analyse_file import _platforms, _shader_types
   for platform in (_platforms + ["no"]):
@@ -116,14 +130,15 @@ for spisok, name in [(permissive, "permissive"), (nonedet, "None"), (other, "oth
       print(f"{shader_type}: "
             f"{len(flatten_removing_repos(filter(config, platform_specific, filters)))}")
 
+  from analyse_file import file_stats
+  for repo, file_jsons in spisok:
+    repo_stats = load_repo_stats(config, repo)
+    for file_json, _ in file_jsons:
+      if file_stats(repo_stats, file_json)['license'] != expectedLT:
+        print("!!!! WTF")
+
   print(f"{name}, cginc: {len(flatten_removing_repos(filter(config, spisok, [ new_filter_file_extensions(['cginc'])])))}")
   print(f"{name}, unreal: {len(flatten_removing_repos(filter(config, spisok, [ new_filter_file_extensions(['ush', 'usf'])])))}")
   print(f"{name}, hlsl(i): {len(flatten_removing_repos(filter(config, spisok, [ new_filter_file_extensions(['hlsl', 'hlsli'])])))}")
   print(f"{name}, fx(h): {len(flatten_removing_repos(filter(config, spisok, [ new_filter_file_extensions(['fx', 'fxh'])])))}")
 
-
-permissive_none_detected = filter(config, permissive, [new_no_platform(), new_no_shader_type()])
-print("-------- Permissive files with no type detected -----------")
-for repo, file_jsons in permissive_none_detected:
-  for file_json in file_jsons:
-    print(f"{repo_dir(config, repo)}/{file_json[0]['path']}")

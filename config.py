@@ -17,8 +17,13 @@ class MultiModuleLogger:
     self.licenses = default_if_None(licenses_logger)
 
 class LicenseGroup(Enum):
+  NoIncludes = 0 # This cannot be used in config.json
   Permissive = 1
   GPL = 2
+  Other = 3 # | These cannot be used in config.json
+  Undetected = 4
+  Inconclusive = 5
+  ExternalFile = 6
 
 class LicenseType:
   def __init__(self, name, gh_search_name, unique_prefix, group : LicenseGroup):

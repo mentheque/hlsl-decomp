@@ -161,5 +161,6 @@ from utils import join_path
 def repo_dir(config : Config, repo : Repository):
   return join_path(config.git_directory, repo.full_name)
 
-
+def repo_commit_sha(config : Config, repo : Repository):
+  return _git_in_dir(["rev-parse", "HEAD"], repo_dir=repo_dir(config, repo)).stdout.strip()
 

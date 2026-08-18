@@ -67,7 +67,7 @@ walked, _ = _walk_repos(config, loaded)
 
 # This needs to happen before filtering bad files out, and seems to had been happening there before.
 # also, add license information in there too.
-from analyse_file import update_stats, load_repo_stats
+from analyse_file import update_basic_stats, load_repo_stats
 from utils import extention_case_variations
 
 

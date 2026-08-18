@@ -135,18 +135,18 @@ def _walk_repos(config : Config, repos : [Repository]):
   return walked, failed
 
 # Leave only shaders where relevant license(s) can be traced to a single file
-def _filter_file_conclusive(walked):
+def _filter_file_conclusive(walked, store_empty_repos = False):
   conclusive = []
   for repo, walked_repo in walked:
     conclusive_repo = [(filenlicenses[0], filenlicenses[1][0])
                        for filenlicenses in walked_repo if len(filenlicenses[1]) == 1]
-    if len(conclusive_repo) > 0:
+    if len(conclusive_repo) > 0 or store_empty_repos:
       conclusive.append((repo, conclusive_repo))
   return conclusive
 
 from config import LicenseGroup
 
-def _sort_file_conclusive(config : Config, file_conclusive):
+def _sort_file_conclusive(config : Config, file_conclusive, store_empty_repos = False):
   permissive_prefixes = [license.unique_prefix for license in config.licenses
                          if license.group == LicenseGroup.Permissive]
   gpl_prefixes = [license.unique_prefix for license in config.licenses
@@ -191,7 +191,7 @@ def _sort_file_conclusive(config : Config, file_conclusive):
       , (clear_gpl, clear_gpl_repo)
       , (failed_to_detect_any, failed_to_detect_any_repo)
       , (non_permissive_or_unclear, non_permissive_or_unclear_repo)]:
-      if len(loc) > 0:
+      if len(loc) > 0 or store_empty_repos:
         glob.append((repo, loc))
 
   return clear_permissive, clear_gpl, failed_to_detect_any, non_permissive_or_unclear

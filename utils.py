@@ -23,3 +23,6 @@ def extention_case_variations(filename : str):
     return ['.'.join(split[:-1] + [ext]) for ext in [split[-1].upper(), split[-1].lower()]]
   else:
     return [filename]
+
+def reponameless_path(file_json):
+  return '/'.join(file_json['path'].split('/')[1:])
