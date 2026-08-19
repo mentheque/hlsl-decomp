@@ -5,7 +5,8 @@ import json
 from logs import Logger, NotLogger
 
 class MultiModuleLogger:
-  def __init__(self, default_logger = None, github_logger = None, git_logger = None, licenses_logger = None):
+  def __init__(self, default_logger = None, github_logger = None, git_logger = None, licenses_logger = None,
+               export_logger = None):
     if not default_logger:
       default_logger = NotLogger
 
@@ -15,6 +16,7 @@ class MultiModuleLogger:
     self.github = default_if_None(github_logger)
     self.git = default_if_None(git_logger)
     self.licenses = default_if_None(licenses_logger)
+    self.export = default_if_None(export_logger)
 
 class LicenseGroup(Enum):
   NoIncludes = 0 # This cannot be used in config.json
@@ -34,13 +36,14 @@ class LicenseType:
 
 class Config:
   _DEFAULT_VALUES = {
-    'additional_file_extensions' : [],
-    'repository_list_dir' : "dumps",
+    'additional_file_extensions': [],
+    'repository_list_dir': "dumps",
     'git_directory':  "cloned_repos",
     'scancode_processes': 2,
     'scancode_cache_dir': "scancode",
     'licenses': [],
-    'shader_stats_dir': "stats"
+    'shader_stats_dir': "stats",
+    'exported_zip_dir': "output"
   }
   def __init__(self,
                language,
@@ -53,7 +56,8 @@ class Config:
                scancode_processes = 2,
                scancode_cache_dir = "scancode",
                licenses: [LicenseType] = [],
-               shader_stats_dir = "stats"):
+               shader_stats_dir = "stats",
+               exported_zip_dir = "output"):
     self.language = language
     self.github_token = github_token
     self.file_extensions = target_file_extensions
@@ -77,6 +81,8 @@ class Config:
     self.download_extensions_patterns = \
       [re.compile(f'.*\\.{re.escape(ext)}$', re.IGNORECASE)
        for ext in self.file_extensions + self.additional_file_extensions]
+
+    self.exported_zip_dir = exported_zip_dir
 
 
 from logs import EchoLogger, PrefixedLogger
@@ -124,7 +130,8 @@ def load_config(path ='config.json') -> Config:
       ltj['unique_prefix'],
       (LicenseGroup.Permissive if ltj['group'] == 'Permissive' else LicenseGroup.GPL)
     ) for ltj in get_or_default('licenses')],
-    shader_stats_dir = get_or_default('shader_stats_dir')
+    shader_stats_dir = get_or_default('shader_stats_dir'),
+    exported_zip_dir=get_or_default('exported_zip_dir')
   )
 
 
@@ -193,7 +200,8 @@ _verifyers = {
       'scancode_processes' : 'int',
       'scancode_cache_dir' : 'str',
       'licenses' : 'license_type_list',
-      'shader_stats_dir' : 'str'
+      'shader_stats_dir' : 'str',
+      'exported_zip_dir' : 'str'
     }
   )
 }

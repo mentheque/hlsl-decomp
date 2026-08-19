@@ -77,19 +77,39 @@ _csv_structure = OrderedDict([
   ('includes_hash', _new_map_include_to_stat('hash')),
   ('worst_included_license', _new_get_stat('worst_included_license', transform=_license_mapping.get)),
 ])
+
+import zipfile
+from io import StringIO
+import csv
+from license_scanning import file_path
+
+from utils import join_path
+def export_file_path(config : Config):
+  return join_path(config.exported_zip_dir, 'export.zip')
 def export(config : Config, walked):
-  csv_body = []
+  config.log.export.primary("Starting export process for base task")
+  output = StringIO()
+  writer = csv.writer(output)
+  writer.writerow(_csv_structure.keys())
+  files = []
   for repo, file_jsons in walked:
     repo_stats = load_repo_stats(config, repo)
     commit_sha = repo_commit_sha(config, repo)
     for file_json, license_sources in file_jsons:
       if file_has_stats(repo_stats, file_json):
         file_stat = file_stats(repo_stats, file_json)
-        csv_body.append([func(file_stat, commit_sha, repo, license_sources, repo_stats)
+        writer.writerow([func(file_stat, commit_sha, repo, license_sources, repo_stats)
                          for func in _csv_structure.values()])
+        files.append((file_path(config, repo, file_json), file_stat['hash']))
 
-  import csv
-  with open('export.csv', 'w', newline='', encoding='utf-8') as file:
-    writer = csv.writer(file)
-    writer.writerow(_csv_structure.keys())
-    writer.writerows(csv_body)
+  config.log.export.primary("Contents calculated, writing zip file")
+  try:
+    export_path = export_file_path(config)
+    export_path.parent.mkdir(exist_ok=True, parents=True)
+    with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+      zipf.writestr('stats.csv', output.getvalue())
+      for file, new_name in files:
+        zipf.write(file, 'contents/' + new_name)
+  except Exception as e:
+    config.log.export.primary(f"Failed to write zip file: {e}")
+    raise e
