@@ -21,7 +21,7 @@ class LicenseGroup(Enum):
   Permissive = 1
   GPL = 2
   Other = 3 # | These cannot be used in config.json
-  Undetected = 4
+  Unidentified = 4
   Inconclusive = 5
   ExternalFile = 6
 

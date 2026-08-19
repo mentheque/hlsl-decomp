@@ -1,3 +1,4 @@
+import export
 import repository_lists
 from config import Config
 from user_dialoge import query, invalid_to_no, terminate, terminate_on_fail, no_to_invalid
@@ -58,16 +59,13 @@ from license_scanning import _walk_repos, _filter_file_conclusive, _sort_file_co
 walked, _ = _walk_repos(config, rlist)
 
 from analyse_file import update_basic_stats, load_repo_stats
+from analyse_file import calculate_license_stats
 
 if recalc_stats:
   for repo, file_jsons in walked:
     update_basic_stats(config, repo, [fj[0] for fj in file_jsons], recalculate=recalc_stats)
+  calculate_license_stats(config, walked)
 
-for repo, file_jsons in walked[0:4]:
-  update_basic_stats(config, repo, [fj[0] for fj in file_jsons], recalculate=True)
-
-from analyse_file import calculate_license_stats
-calculate_license_stats(config, walked)
 
 # for repo, file_jsons in walked:
 #   stats = load_repo_stats(config, repo)
@@ -107,38 +105,40 @@ print(f"permissive: {len(flatten_removing_repos(permissive))}, gpl : {len(flatte
 
 from filter import new_filter_file_extensions, new_filter_platform, new_filter_shader_type, new_no_platform,\
   new_no_shader_type
+#
+# from config import LicenseGroup
+# for spisok, name, expectedLT in [(permissive, "permissive", LicenseGroup.Permissive),
+#                                  (nonedet, "None", LicenseGroup.Unidentified), (other, "other", LicenseGroup.Other),
+#                                  (gpl, "gpl", LicenseGroup.GPL)]:
+#   print(f"------ {name} ---------")
+#   from analyse_file import _platforms, _shader_types
+#   for platform in (_platforms + ["no"]):
+#     platform_specific = []
+#     if platform == "no":
+#       platform_specific =  filter(config, spisok, [new_no_platform()])
+#     else:
+#       platform_specific = filter(config, spisok, [new_filter_platform(platform)])
+#     print(f"++ {platform}: {len(flatten_removing_repos(platform_specific))}")
+#     for shader_type in (_shader_types + ["no"]):
+#       filters = []
+#       if shader_type == "no":
+#         filters = [new_no_shader_type()]
+#       else:
+#         filters = [new_filter_shader_type(shader_type)]
+#       print(f"{shader_type}: "
+#             f"{len(flatten_removing_repos(filter(config, platform_specific, filters)))}")
+#
+#   from analyse_file import file_stats
+#   for repo, file_jsons in spisok:
+#     repo_stats = load_repo_stats(config, repo)
+#     for file_json, _ in file_jsons:
+#       if file_stats(repo_stats, file_json)['license'] != expectedLT:
+#         print("!!!! WTF")
+#
+#   print(f"{name}, cginc: {len(flatten_removing_repos(filter(config, spisok, [ new_filter_file_extensions(['cginc'])])))}")
+#   print(f"{name}, unreal: {len(flatten_removing_repos(filter(config, spisok, [ new_filter_file_extensions(['ush', 'usf'])])))}")
+#   print(f"{name}, hlsl(i): {len(flatten_removing_repos(filter(config, spisok, [ new_filter_file_extensions(['hlsl', 'hlsli'])])))}")
+#   print(f"{name}, fx(h): {len(flatten_removing_repos(filter(config, spisok, [ new_filter_file_extensions(['fx', 'fxh'])])))}")
 
-from config import LicenseGroup
-for spisok, name, expectedLT in [(permissive, "permissive", LicenseGroup.Permissive),
-                     (nonedet, "None", LicenseGroup.Undetected), (other, "other", LicenseGroup.Other),
-                     (gpl, "gpl", LicenseGroup.GPL)]:
-  print(f"------ {name} ---------")
-  from analyse_file import _platforms, _shader_types
-  for platform in (_platforms + ["no"]):
-    platform_specific = []
-    if platform == "no":
-      platform_specific =  filter(config, spisok, [new_no_platform()])
-    else:
-      platform_specific = filter(config, spisok, [new_filter_platform(platform)])
-    print(f"++ {platform}: {len(flatten_removing_repos(platform_specific))}")
-    for shader_type in (_shader_types + ["no"]):
-      filters = []
-      if shader_type == "no":
-        filters = [new_no_shader_type()]
-      else:
-        filters = [new_filter_shader_type(shader_type)]
-      print(f"{shader_type}: "
-            f"{len(flatten_removing_repos(filter(config, platform_specific, filters)))}")
 
-  from analyse_file import file_stats
-  for repo, file_jsons in spisok:
-    repo_stats = load_repo_stats(config, repo)
-    for file_json, _ in file_jsons:
-      if file_stats(repo_stats, file_json)['license'] != expectedLT:
-        print("!!!! WTF")
-
-  print(f"{name}, cginc: {len(flatten_removing_repos(filter(config, spisok, [ new_filter_file_extensions(['cginc'])])))}")
-  print(f"{name}, unreal: {len(flatten_removing_repos(filter(config, spisok, [ new_filter_file_extensions(['ush', 'usf'])])))}")
-  print(f"{name}, hlsl(i): {len(flatten_removing_repos(filter(config, spisok, [ new_filter_file_extensions(['hlsl', 'hlsli'])])))}")
-  print(f"{name}, fx(h): {len(flatten_removing_repos(filter(config, spisok, [ new_filter_file_extensions(['fx', 'fxh'])])))}")
-
+export.export(config, filtered)

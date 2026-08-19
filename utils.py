@@ -24,5 +24,7 @@ def extention_case_variations(filename : str):
   else:
     return [filename]
 
-def reponameless_path(file_json):
+def reponameless_path(filepath):
+  return '/'.join(filepath.split('/')[1:])
+def reponameless_path_json(file_json):
   return '/'.join(file_json['path'].split('/')[1:])

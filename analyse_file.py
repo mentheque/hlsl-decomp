@@ -369,7 +369,7 @@ def calculate_license_stats(config : Config, walked):
       # but this works too.
 
     for license_group, repos_n_files in [(LicenseGroup.Permissive, permissive), (LicenseGroup.GPL, gpl),
-                                         (LicenseGroup.Undetected, nonedet), (LicenseGroup.Other, other)]:
+                                         (LicenseGroup.Unidentified, nonedet), (LicenseGroup.Other, other)]:
       for file_json, _ in repos_n_files[i][1]:
         # Some files from file_jsons may be missing if errored on basic stat calculations, so ignoring them here
         if _file_key(file_json) in repo_stats:
@@ -383,4 +383,13 @@ def calculate_license_stats(config : Config, walked):
     _save_repo_stats(config, repo, repo_stats)
 
 def file_stats(repo_stats, file_json):
-  return repo_stats[_file_key(file_json)]
+  return file_stats_key(repo_stats, _file_key(file_json))
+
+def file_stats_key(repo_stats, file_key):
+  return repo_stats[file_key]
+
+def file_has_stats_key(repo_stats, file_key):
+  return file_key in repo_stats
+
+def file_has_stats(repo_stats, file_json):
+  return file_has_stats_key(repo_stats, _file_key(file_json))
