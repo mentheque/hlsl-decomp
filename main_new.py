@@ -141,4 +141,4 @@ from filter import new_filter_file_extensions, new_filter_platform, new_filter_s
 #   print(f"{name}, fx(h): {len(flatten_removing_repos(filter(config, spisok, [ new_filter_file_extensions(['fx', 'fxh'])])))}")
 
 
-export.export(config, filtered)
+export.export(config, filtered, rlist_variant = rlist_variant, name = "all_licenses_conclusive")

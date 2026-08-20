@@ -69,6 +69,10 @@ def filter_is_shader(repo_stats, file_json):
 def new_no_shader_type():
   return _no_categorical_detected('shader_type')
 
+def new_filter_selected_licenses(license_groups, filter_includes = False):
+  return (lambda repo_stats, file_json: file_stats(repo_stats, file_json)['license'] in license_groups \
+           and ((not filter_includes) or file_stats(repo_stats, file_json)['worst_included_license'] in license_groups))
+
 def filter(config : Config, walked, filters):
   filtered = []
   for repo, file_license_pairs in walked:
