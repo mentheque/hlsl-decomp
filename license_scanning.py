@@ -204,3 +204,6 @@ def flatten_removing_repos(list_w_repos):
 from git_utils import repo_dir
 def file_path(config : Config, repo : Repository, file_json):
   return repo_dir(config, repo) / Path(*Path(file_json["path"]).parts[1:])
+
+def file_path_fstat(config : Config, repo : Repository, file_stat):
+  return repo_dir(config, repo) / Path(*Path(file_stat["case_sensitive_path"]).parts[1:])

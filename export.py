@@ -113,7 +113,7 @@ def export_file_path(config : Config, rlist_variant: RepositoryLists, name):
   return join_path(config.exported_zip_dir,
                    f'export_{empty_if_none(rlist_variant, _list_name_mapping.get)}_{empty_if_none(name)}.zip')
 
-def export(config : Config, walked, rlist_variant: RepositoryLists = None, name = None):
+def export_base(config : Config, walked, rlist_variant: RepositoryLists = None, name = None):
   config.log.export.primary("Starting export process for base task")
   output = StringIO()
   writer = csv.writer(output)

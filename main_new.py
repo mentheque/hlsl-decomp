@@ -89,6 +89,7 @@ from filter import filter, new_filter_size, new_filter_line_count, new_filter_un
 filtered = filter(config, conc, [filter_has_stats, filter_is_shader, new_filter_size(0), new_filter_line_count(0),
                                  new_filter_unique_hash(config)])
 
+
 for repo, file_jsons in filtered:
   if recalc_stats:
     update_basic_stats(config, repo, [fj[0] for fj in file_jsons], recalculate=recalc_stats)
@@ -141,4 +142,9 @@ from filter import new_filter_file_extensions, new_filter_platform, new_filter_s
 #   print(f"{name}, fx(h): {len(flatten_removing_repos(filter(config, spisok, [ new_filter_file_extensions(['fx', 'fxh'])])))}")
 
 
-export.export(config, filtered, rlist_variant = rlist_variant, name = "all_licenses_conclusive")
+no_platform = filter(config, filtered, [new_no_platform()])
+from analyse_file import calculate_vanilla_compilation_parameters
+
+calculate_vanilla_compilation_parameters(config, no_platform)
+
+#export.export_base(config, filtered, rlist_variant = rlist_variant, name ="all_licenses_conclusive")

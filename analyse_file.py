@@ -67,6 +67,8 @@ _pfilename_patterns = _compile_dict_patterns(
     'UnrealEngine' : [(r'\.ush$', 0.95), (r'\.usf$', 0.95)]
   }
 )
+
+# TODO: redo basic stats calculations, changed some patterns
 _pcontents_patterns = _compile_dict_patterns(
   {
     'ReShade' : [(r'#include\s*"ReShade\.fxh"', 0.9),
@@ -77,7 +79,10 @@ _pcontents_patterns = _compile_dict_patterns(
                  (r'#pragma\s+(vertex|fragment|geometry|hull|domain|compute)', 0.9),
                  (r'UNITY_[A-Z_]+', 0.9),
                  (r'CBUFFER_(START|END)', 0.8),
-                 (r'com.unity', 0.8)],
+                 (r'#if\s+SHADERPASS\s*!=', 0.8),
+                 (r'SHADERPASS_\w+', 0.8),
+                 (r'com.unity', 0.8),
+                 (r'\.cginc', 0.8)], # if .cginc includes are external and thus cannot pass evaluation down
     'Ogre3D'  : [(r'#include\s*<OgreUnifiedShader\.h>', 0.9)],
     'MS FX'   : [(r'^\s*technique(10|11)?\s+[a-zA-Z_][a-zA-Z0-9_]*\s*\{', 0.9),
                  (r'^\s*pass\s+[a-zA-Z_][a-zA-Z0-9_]*\s*\{', 0.9),
@@ -382,6 +387,60 @@ def calculate_license_stats(config : Config, walked):
 
     _save_repo_stats(config, repo, repo_stats)
 
+
+
+_entry_point_patterns = {
+  'pixel': [
+    r'\b\w+\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*:\s*SV_Target\b',
+    r'\b\w+\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*:\s*SV_Target\d+\b',
+    r'\bvoid\s+([a-zA-Z_]\w*)\s*\(([^)]*out\s+\w+\s+\w+\s*:\s*SV_Target[^)]*)\)',
+    r'\b\w+\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*:\s*COLOR\d*\b',
+    r'\bvoid\s+([a-zA-Z_]\w*)\s*\(([^)]*,\s*out\s+\w+\s+\w+\s*:\s*SV_Depth\b[^)]*)\)'
+  ],
+  'vertex': [],
+  'compute': []
+}
+
+from itertools import chain
+from license_scanning import file_path_fstat
+def calculate_vanilla_compilation_parameters(config : Config, walked):
+  def flatten_uniquely(vlist):
+    return list(set(chain.from_iterable(vlist)))
+
+  compiled = {}
+  compiled['pixel'] = [re.compile(pattern, re.IGNORECASE | re.DOTALL) for pattern in _entry_point_patterns['pixel'] ]
+
+  def detect_pixel_ep(contents):
+    struct_pattern = r'\bstruct\s+(\w+)\s*\{[^}]*SV_Target[^}]*\}'
+    structs = re.findall(struct_pattern, contents, re.IGNORECASE | re.DOTALL)
+
+    #TODO: fix copypaste
+    patterns = flatten_uniquely([
+      [rf'\b{struct_name}\s+([a-zA-Z_]\w*)\s*\(' for struct_name in structs],
+      [rf'\bvoid\s+([a-zA-Z_]\w*)\s*\([^)]*inout\s+{struct_name}\s+\w+[^)]*\)' for struct_name in structs],
+      [rf'\bvoid\s+([a-zA-Z_]\w*)\s*\([^)]*out\s+{struct_name}\s+\w+[^)]*\)' for struct_name in structs],
+    ])
+
+    return flatten_uniquely([re.findall(pattern, contents, re.IGNORECASE | re.DOTALL) for pattern in patterns])
+
+  print("---- entry points ----")
+
+  for repo, file_jsons in walked:
+    repo_stats = load_repo_stats(config, repo)
+    for file_json, _ in file_jsons:
+      file_stat = file_stats(repo_stats, file_json)
+      if file_stat['is_shader'] and file_stat['shader_type']['pixel'] > 0:
+        filepath = file_path_fstat(config, repo, file_stat)
+        normalised_contents = _normalise(filepath)
+
+        file_stat['entry_points'] = {}
+        file_stat['entry_points']['pixel'] = \
+          flatten_uniquely(
+            [[match[0] for match in comp.findall(normalised_contents)] for comp in compiled['pixel']] +
+            [detect_pixel_ep(normalised_contents)]
+          )
+        if len(file_stat['entry_points']['pixel']) == 0:
+          print(file_stat['case_sensitive_path'])
 def file_stats(repo_stats, file_json):
   return file_stats_key(repo_stats, _file_key(file_json))
 

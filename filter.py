@@ -24,7 +24,7 @@ def new_filter_unique_hash(config : Config):
   def filter(repo_stats, file_json):
     hash = file_stats(repo_stats, file_json)['hash']
     if hash in encountered:
-      #config.log.licenses.secondary(f"Hash collision: {encountered[hash]}, {file_json['path']}")
+      # config.log.licenses.secondary(f"Hash collision: {encountered[hash]}, {file_json['path']}")
       return True
     else:
       encountered[hash] = file_json['path']
