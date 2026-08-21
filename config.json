@@ -14,6 +14,7 @@
     "h"
   ],
   "git_directory": "C:/Users/menth/Documents/cloned_repos3",
+  "preprocessed_dir": "C:/Users/menth/Documents/preprocessed",
   "scancode_cache_dir": "scancode2",
   "scancode_processes": 6,
   "licenses": [
@@ -77,5 +78,14 @@
       "unique_prefix": "GPL",
       "group": "GPL"
     }
-  ]
+  ],
+  "fxc_path" : "C:/Program Files (x86)/Windows Kits/10/bin/10.0.22621.0/x64/fxc.exe",
+  "dxc_path" : "C:/Program Files (x86)/Windows Kits/10/bin/10.0.22621.0/x64/dxc.exe",
+  "compile_directives" : {
+    "preprocessing" : {
+      "QuirkyPlague/EscheridiaRT" : {
+        "fxc" : []
+      }
+    }
+  }
 }

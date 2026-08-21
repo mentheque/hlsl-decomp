@@ -411,8 +411,9 @@ def calculate_vanilla_compilation_parameters(config : Config, walked):
   compiled['pixel'] = [re.compile(pattern, re.IGNORECASE | re.DOTALL) for pattern in _entry_point_patterns['pixel'] ]
 
   def detect_pixel_ep(contents):
-    struct_pattern = r'\bstruct\s+(\w+)\s*\{[^}]*SV_Target[^}]*\}'
-    structs = re.findall(struct_pattern, contents, re.IGNORECASE | re.DOTALL)
+    struct_patterns = [r'\bstruct\s+(\w+)\s*\{[^}]*SV_Target[^}]*\}', r'\bstruct\s+(\w+)\s*\{[^}]*:\s*COLOR[^}]*\}']
+    structs = flatten_uniquely(
+      [re.findall(struct_pattern, contents, re.IGNORECASE | re.DOTALL) for struct_pattern in struct_patterns])
 
     #TODO: fix copypaste
     patterns = flatten_uniquely([

@@ -28,3 +28,8 @@ def reponameless_path(filepath):
   return '/'.join(filepath.split('/')[1:])
 def reponameless_path_json(file_json):
   return '/'.join(file_json['path'].split('/')[1:])
+
+from enum import Enum
+class CompilerTypes(Enum):
+  FXC = 0
+  DXC = 1

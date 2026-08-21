@@ -61,6 +61,8 @@ walked, _ = _walk_repos(config, rlist)
 from analyse_file import update_basic_stats, load_repo_stats
 from analyse_file import calculate_license_stats
 
+#recalc_stats = True
+
 if recalc_stats:
   for repo, file_jsons in walked:
     update_basic_stats(config, repo, [fj[0] for fj in file_jsons], recalculate=recalc_stats)
@@ -145,6 +147,10 @@ from filter import new_filter_file_extensions, new_filter_platform, new_filter_s
 no_platform = filter(config, filtered, [new_no_platform()])
 from analyse_file import calculate_vanilla_compilation_parameters
 
-calculate_vanilla_compilation_parameters(config, no_platform)
+from compile import preprocess
+
+preprocess(config, no_platform, False)
+
+#calculate_vanilla_compilation_parameters(config, no_platform)
 
 #export.export_base(config, filtered, rlist_variant = rlist_variant, name ="all_licenses_conclusive")

@@ -6,7 +6,7 @@ from logs import Logger, NotLogger
 
 class MultiModuleLogger:
   def __init__(self, default_logger = None, github_logger = None, git_logger = None, licenses_logger = None,
-               export_logger = None):
+               export_logger = None, compile_logger = None):
     if not default_logger:
       default_logger = NotLogger
 
@@ -17,6 +17,7 @@ class MultiModuleLogger:
     self.git = default_if_None(git_logger)
     self.licenses = default_if_None(licenses_logger)
     self.export = default_if_None(export_logger)
+    self.compile = default_if_None(compile_logger)
 
 class LicenseGroup(Enum):
   NoIncludes = 0 # This cannot be used in config.json
@@ -34,6 +35,8 @@ class LicenseType:
     self.unique_prefix = unique_prefix
     self.group = group
 
+from utils import CompilerTypes
+
 class Config:
   _DEFAULT_VALUES = {
     'additional_file_extensions': [],
@@ -43,7 +46,11 @@ class Config:
     'scancode_cache_dir': "scancode",
     'licenses': [],
     'shader_stats_dir': "stats",
-    'exported_zip_dir': "output"
+    'exported_zip_dir': "output",
+    'preprocessed_dir' : "preprocessed",
+    'compile_directives' : {},
+    'fxc_path' : 'fxc',
+    'dxc_path' : 'dxc'
   }
   def __init__(self,
                language,
@@ -57,7 +64,11 @@ class Config:
                scancode_cache_dir = "scancode",
                licenses: [LicenseType] = [],
                shader_stats_dir = "stats",
-               exported_zip_dir = "output"):
+               exported_zip_dir = "output",
+               preprocessed_dir = "preprocessed",
+               compile_directives = {},
+               fxc_path = 'fxc',
+               dxc_path = 'dxc'):
     self.language = language
     self.github_token = github_token
     self.file_extensions = target_file_extensions
@@ -83,6 +94,13 @@ class Config:
        for ext in self.file_extensions + self.additional_file_extensions]
 
     self.exported_zip_dir = exported_zip_dir
+    self.preprocessed_dir = preprocessed_dir
+
+    self.compile_directives = compile_directives
+    self.compiler_path = {
+      CompilerTypes.FXC: fxc_path,
+      CompilerTypes.DXC: dxc_path
+    }
 
 
 from logs import EchoLogger, PrefixedLogger
@@ -131,7 +149,11 @@ def load_config(path ='config.json') -> Config:
       (LicenseGroup.Permissive if ltj['group'] == 'Permissive' else LicenseGroup.GPL)
     ) for ltj in get_or_default('licenses')],
     shader_stats_dir = get_or_default('shader_stats_dir'),
-    exported_zip_dir=get_or_default('exported_zip_dir')
+    exported_zip_dir=get_or_default('exported_zip_dir'),
+    preprocessed_dir = get_or_default('preprocessed_dir'),
+    compile_directives = get_or_default('compile_directives'),
+    fxc_path=get_or_default('fxc_path'),
+    dxc_path=get_or_default('dxc_path'),
   )
 
 
@@ -140,6 +162,9 @@ def _type_verifier(type):
 
 def _list_verifier(member_verifier_key):
   return (lambda l: isinstance(l, list) and all(_verifyers[member_verifier_key](mem) for mem in l))
+
+def _dict_verifier(member_verifier_key):
+  return (lambda d: isinstance(d, dict) and all(_verifyers[member_verifier_key](mem) for mem in d.values()))
 
 def _schema_verifier(schema, optionals_schema):
   def inner(js):
@@ -201,7 +226,27 @@ _verifyers = {
       'scancode_cache_dir' : 'str',
       'licenses' : 'license_type_list',
       'shader_stats_dir' : 'str',
-      'exported_zip_dir' : 'str'
+      'exported_zip_dir' : 'str',
+      'preprocessed_dir' : 'str',
+      'compile_directives' : 'compile_directives_all',
+      'fxc_path' : 'str',
+      'dxc_path' : 'str'
+    }
+  ),
+
+  'additional_directives' : _schema_verifier(
+    {},
+    {
+      'dxc': 'str_list',
+      'fxc': 'str_list'
+    }
+  ),
+  'compile_step_additionals' : _dict_verifier('additional_directives'),
+  'compile_directives_all' : _schema_verifier(
+    {},
+    {
+      'preprocessing' : 'compile_step_additionals',
+      'compilation'   : 'compile_step_additionals'
     }
   )
 }
