@@ -83,8 +83,25 @@
   "dxc_path" : "C:/Program Files (x86)/Windows Kits/10/bin/10.0.22621.0/x64/dxc.exe",
   "compile_directives" : {
     "preprocessing" : {
-      "QuirkyPlague/EscheridiaRT" : {
-        "fxc" : []
+      "leotorrez/ZZMI-Package" : {
+        "fxc" : ["/D", "VERTEX_SHADER", "/D", "PIXEL_SHADER", "/D", "COMPUTE_SHADER"],
+        "dxc" : ["-D", "VERTEX_SHADER", "-D", "PIXEL_SHADER", "-D", "COMPUTE_SHADER"]
+      },
+      "SpectrumQT/EFMI-Package" : {
+        "fxc" : ["/D", "VERTEX_SHADER", "/D", "PIXEL_SHADER"],
+        "dxc" : ["-D", "VERTEX_SHADER", "-D", "PIXEL_SHADER"]
+      },
+      "CHN-HelloWorld/NEMI" : {
+        "fxc" : ["/D", "VERTEX_SHADER", "/D", "PIXEL_SHADER", "/D", "COMPUTE_SHADER"],
+        "dxc" : ["-D", "VERTEX_SHADER", "-D", "PIXEL_SHADER", "-D", "COMPUTE_SHADER"]
+      },
+      "SpectrumQT/WWMI-Package" : {
+        "fxc" : ["/D", "VERTEX_SHADER", "/D", "PIXEL_SHADER", "/D", "COMPUTE_SHADER"],
+        "dxc" : ["-D", "VERTEX_SHADER", "-D", "PIXEL_SHADER", "-D", "COMPUTE_SHADER"]
+      },
+      "asdfghjklt6/yms" : {
+        "fxc" : ["/D", "VERTEX_SHADER", "/D", "PIXEL_SHADER", "/D", "COMPUTE_SHADER"],
+        "dxc" : ["-D", "VERTEX_SHADER", "-D", "PIXEL_SHADER", "-D", "COMPUTE_SHADER"]
       }
     }
   }

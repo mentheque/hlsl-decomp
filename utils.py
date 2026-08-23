@@ -46,3 +46,7 @@ def _make_file_key(file_path : str):
 
 def _file_key(file_json):
   return _make_file_key(file_json['path'])
+
+from itertools import chain
+def flatten_uniquely(vlist):
+  return list(set(chain.from_iterable(vlist)))

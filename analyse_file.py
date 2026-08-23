@@ -389,16 +389,36 @@ def _compile_ep_patterns(patterns, flags = re.IGNORECASE | re.DOTALL):
 
   return ret
 
+from utils import CompilerTypes, flatten_uniquely
 _entry_point_patterns = _compile_ep_patterns({
-  'pixel': [
-    r'\b\w+\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*:\s*SV_Target\b',
-    r'\b\w+\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*:\s*SV_Target\d+\b',
-    r'\bvoid\s+([a-zA-Z_]\w*)\s*\(([^)]*out\s+\w+\s+\w+\s*:\s*SV_Target[^)]*)\)',
-    r'\b\w+\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*:\s*COLOR\d*\b',
-    r'\bvoid\s+([a-zA-Z_]\w*)\s*\(([^)]*,\s*out\s+\w+\s+\w+\s*:\s*SV_Depth\b[^)]*)\)'
-  ],
-  'vertex': [],
-  'compute': []
+  'pixel': flatten_uniquely([
+    [
+      rf'\b\w+\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*:\s*{indicator}\b',
+      rf'\b\w+\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*:\s*{indicator}\d+\b',
+      rf'\bvoid\s+([a-zA-Z_]\w*)\s*\(([^)]*out\s+\w+\s+\w+\s*:\s*{indicator}[^)]*)\)',
+      rf'\b\w+\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*:\s*{indicator}\d*\b',
+      rf'\bvoid\s+([a-zA-Z_]\w*)\s*\(([^)]*,\s*out\s+\w+\s+\w+\s*:\s*{indicator}\b[^)]*)\)'
+    ] for indicator in ['SV_Target', 'SV_Depth', 'COLOR']
+  ]),
+  'vertex': flatten_uniquely([
+      [
+        rf'\b\w+\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*:\s*{indicator}\b',
+        rf'\b\w+\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*:\s*{indicator}\d+\b',
+        rf'\bvoid\s+([a-zA-Z_]\w*)\s*\(([^)]*out\s+\w+\s+\w+\s*:\s*{indicator}[^)]*)\)',
+        rf'\b\w+\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*:\s*{indicator}\d*\b',
+        rf'\bvoid\s+([a-zA-Z_]\w*)\s*\(([^)]*,\s*out\s+\w+\s+\w+\s*:\s*{indicator}\b[^)]*)\)'
+      ] for indicator in ['SV_Position', 'POSITION', 'SV_VertexID', 'VERTEXID', 'SV_InstanceID', 'INSTANCEID']
+    ]),
+  'compute': flatten_uniquely([
+    [
+        r'\[numthreads\s*\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)\s*\]\s*(?:\w+\s+)?([a-zA-Z_]\w*)\s*\(([^)]*)\)',
+        r'\[numthreads\s*\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)\s*\]\s*\n\s*(?:\w+\s+)?([a-zA-Z_]\w*)\s*\(([^)]*)\)',
+    ]
+    + [
+        rf'\b\w+\s+([a-zA-Z_]\w*)\s*\(([^)]*{semantic}[^)]*)\)'
+        for semantic in ['SV_DispatchThreadID', 'SV_GroupThreadID', 'SV_GroupID', 'SV_GroupIndex']
+    ]
+  ])
 })
 
 _default_ep_values = {
@@ -407,22 +427,38 @@ _default_ep_values = {
   'compute' : ['main']
 }
 
-from itertools import chain
-from utils import CompilerTypes
+_comptarget_prefix = {
+  'pixel' : 'ps',
+  'vertex' : 'vs',
+  'compute' : 'cs'
+}
+
+_comptarget_patterns = _compile_ep_patterns({
+    shader_type : [rf'{_comptarget_prefix[shader_type]}_\d+_[x\d]+']
+    for shader_type in _shader_types
+  },
+  flags=0
+)
+
+
+
+
 from compile import load_preprocessed_file
 from collections import defaultdict
 def calculate_vanilla_compilation_parameters(config : Config, walked, specific_shader_types = None,
                                              excluded_repos : list = None, included_repos : list = None):
   selected_shader_types = _shader_types if specific_shader_types is None else specific_shader_types
+  def default_if_absent(dictionary, key, value):
+    if key not in dictionary:
+      dictionary[key] = value
+    return dictionary[key]
+
 
   filter = lambda x : True
   if excluded_repos is not None:
     filter = lambda x: x not in excluded_repos
   if included_repos is not None:
     filter = lambda x: x in included_repos
-
-  def flatten_uniquely(vlist):
-    return list(set(chain.from_iterable(vlist)))
 
   def detect_pixel_ep(contents):
     struct_patterns = [r'\bstruct\s+(\w+)\s*\{[^}]*SV_Target[^}]*\}', r'\bstruct\s+(\w+)\s*\{[^}]*:\s*COLOR[^}]*\}']
@@ -437,9 +473,28 @@ def calculate_vanilla_compilation_parameters(config : Config, walked, specific_s
     ])
     return flatten_uniquely([re.findall(pattern, contents, re.IGNORECASE | re.DOTALL) for pattern in patterns])
 
+  def detect_vertex_ep(contents):
+    struct_patterns = [
+      r'\bstruct\s+(\w+)\s*\{[^}]*SV_Position[^}]*\}',
+      r'\bstruct\s+(\w+)\s*\{[^}]*:\s*POSITION[^}]*\}',
+      r'\bstruct\s+(\w+)\s*\{[^}]*SV_VertexID[^}]*\}',
+      r'\bstruct\s+(\w+)\s*\{[^}]*:\s*VERTEXID[^}]*\}',
+      r'\bstruct\s+(\w+)\s*\{[^}]*SV_InstanceID[^}]*\}',
+      r'\bstruct\s+(\w+)\s*\{[^}]*:\s*INSTANCEID[^}]*\}'
+    ]
+    structs = flatten_uniquely(
+      [re.findall(struct_pattern, contents, re.IGNORECASE | re.DOTALL) for struct_pattern in struct_patterns]
+    )
+    patterns = flatten_uniquely([
+      [rf'\b{struct_name}\s+([a-zA-Z_]\w*)\s*\(' for struct_name in structs],
+      [rf'\bvoid\s+([a-zA-Z_]\w*)\s*\([^)]*inout\s+{struct_name}\s+\w+[^)]*\)' for struct_name in structs],
+      [rf'\bvoid\s+([a-zA-Z_]\w*)\s*\([^)]*out\s+{struct_name}\s+\w+[^)]*\)' for struct_name in structs]
+    ])
+    return flatten_uniquely([re.findall(pattern, contents, re.IGNORECASE | re.DOTALL) for pattern in patterns])
+
   additional_searches = {
     'pixel' : detect_pixel_ep,
-    'vertex' : (lambda x : []),
+    'vertex' : detect_vertex_ep,
     'compute' : (lambda x : [])
   }
 
@@ -461,13 +516,20 @@ def calculate_vanilla_compilation_parameters(config : Config, walked, specific_s
           compiler_type: load_preprocessed_file(config, repo_stats, file_json, compiler_type)
           for compiler_type in CompilerTypes
         }
+        normalised = _normalise(file_path(config, repo, file_json))
 
-        if 'entry_points' not in file_stat:
-          file_stat['entry_points'] = {}
-
+        default_if_absent(file_stat, 'entry_points', {})
+        default_if_absent(file_stat, 'compilation_targets', {})
         for shader_type in selected_shader_types:
           file_stat['entry_points'][shader_type] = []
+          file_stat['compilation_targets'][shader_type] = []
+
           if file_stat['shader_type'][shader_type] > 0:
+            filename = file_name(file_json)
+            file_stat['compilation_targets'][shader_type] = \
+              flatten_uniquely([pattern.findall(filename) + pattern.findall(normalised)
+                                for pattern in _comptarget_patterns[shader_type]])
+
             for compiler_type in CompilerTypes:
               contents = per_compiler_contents[compiler_type]
               if contents is not None:
@@ -490,6 +552,7 @@ def calculate_vanilla_compilation_parameters(config : Config, walked, specific_s
                 f" {file_stat['entry_points'][shader_type]}")
               file_destination = successfull_attempts
             file_destination[shader_type].append(file_stat['case_sensitive_path'])
+            print(f"target {filename}: {file_stat['compilation_targets'][shader_type]}")
 
     _save_repo_stats(config, repo, repo_stats)
 

@@ -61,7 +61,7 @@ walked, _ = _walk_repos(config, rlist)
 from analyse_file import update_basic_stats, load_repo_stats
 from analyse_file import calculate_license_stats
 
-#recalc_stats = True
+recalc_stats = False
 
 if recalc_stats:
   for repo, file_jsons in walked:
@@ -90,16 +90,6 @@ from filter import filter, new_filter_size, new_filter_line_count, new_filter_un
 
 filtered = filter(config, conc, [filter_has_stats, filter_is_shader, new_filter_size(0), new_filter_line_count(0),
                                  new_filter_unique_hash(config)])
-
-
-for repo, file_jsons in filtered:
-  if recalc_stats:
-    update_basic_stats(config, repo, [fj[0] for fj in file_jsons], recalculate=recalc_stats)
-  repo_stats = load_repo_stats(config, repo)
-
-  for file, stat in repo_stats.items():
-    if stat['platforms']['Ogre3D'] > 0:
-      print("Filtered", stat)
 
 permissive, gpl, nonedet, other = _sort_file_conclusive(config, filtered)
 
@@ -162,11 +152,25 @@ permissive, gpl, nonedet, other = _sort_file_conclusive(config, all_good_license
 print(f"permissive: {len(flatten_removing_repos(permissive))}, gpl : {len(flatten_removing_repos(gpl))} "
       f"None: {len(flatten_removing_repos(nonedet))}, other: {len(flatten_removing_repos(other))}")
 
+
+from analyse_file import file_stats
+for repo, file_jsons in all_good_licenses:
+  if recalc_stats:
+    update_basic_stats(config, repo, [fj[0] for fj in file_jsons], recalculate=recalc_stats)
+  repo_stats = load_repo_stats(config, repo)
+
+  for file_json, _ in file_jsons:
+    if file_stats(repo_stats, file_json)['hash'] == 'be3f29cfb82ea841cbb5f2bf2675161917707db2fa5f20223e3bbd52d1e17b8b' \
+      or file_stats(repo_stats, file_json)['worst_included_license'] \
+      not in [LicenseGroup.Permissive, LicenseGroup.GPL, LicenseGroup.NoIncludes]:
+      print("!! WTF")
+
+
 from compile import preprocess
 
-#preprocess(config, all_good_licenses, False)
+#preprocess(config, all_good_licenses, only_specified=True)
 
-calculate_vanilla_compilation_parameters(config, all_good_licenses, specific_shader_types=['pixel'],
-                                         excluded_repos=['clshortfuse/renodx', 'NotVoosh/renodx-unity'])
+calculate_vanilla_compilation_parameters(config, all_good_licenses)#, specific_shader_types=['compute'],
+                                        # excluded_repos=['clshortfuse/renodx', 'NotVoosh/renodx-unity'])
 
 #export.export_base(config, filtered, rlist_variant = rlist_variant, name ="all_licenses_conclusive")
