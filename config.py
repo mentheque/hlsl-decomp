@@ -242,6 +242,7 @@ _verifyers = {
     }
   ),
   'compile_step_additionals' : _dict_verifier('additional_directives'),
+  # TODO: add default additionals for all files
   'compile_directives_all' : _schema_verifier(
     {},
     {

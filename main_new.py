@@ -66,8 +66,8 @@ from analyse_file import calculate_license_stats
 if recalc_stats:
   for repo, file_jsons in walked:
     update_basic_stats(config, repo, [fj[0] for fj in file_jsons], recalculate=recalc_stats)
-  calculate_license_stats(config, walked)
 
+  calculate_license_stats(config, walked)
 
 # for repo, file_jsons in walked:
 #   stats = load_repo_stats(config, repo)
@@ -145,12 +145,28 @@ from filter import new_filter_file_extensions, new_filter_platform, new_filter_s
 
 
 no_platform = filter(config, filtered, [new_no_platform()])
+
+
+from filter import new_filter_selected_licenses
+from config import LicenseGroup
+
+all_good_licenses = filter(config, no_platform,
+                           [new_filter_selected_licenses(
+                             [LicenseGroup.Permissive, LicenseGroup.GPL, LicenseGroup.NoIncludes],
+                             filter_includes=True
+                           )])
 from analyse_file import calculate_vanilla_compilation_parameters
+
+permissive, gpl, nonedet, other = _sort_file_conclusive(config, all_good_licenses)
+
+print(f"permissive: {len(flatten_removing_repos(permissive))}, gpl : {len(flatten_removing_repos(gpl))} "
+      f"None: {len(flatten_removing_repos(nonedet))}, other: {len(flatten_removing_repos(other))}")
 
 from compile import preprocess
 
-preprocess(config, no_platform, False)
+#preprocess(config, all_good_licenses, False)
 
-#calculate_vanilla_compilation_parameters(config, no_platform)
+calculate_vanilla_compilation_parameters(config, all_good_licenses, specific_shader_types=['pixel'],
+                                         excluded_repos=['clshortfuse/renodx', 'NotVoosh/renodx-unity'])
 
 #export.export_base(config, filtered, rlist_variant = rlist_variant, name ="all_licenses_conclusive")

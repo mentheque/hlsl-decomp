@@ -33,3 +33,16 @@ from enum import Enum
 class CompilerTypes(Enum):
   FXC = 0
   DXC = 1
+
+def file_stats(repo_stats, file_json):
+  return file_stats_key(repo_stats, _file_key(file_json))
+
+def file_stats_key(repo_stats, file_key):
+  return repo_stats[file_key]
+
+def _make_file_key(file_path : str):
+  return file_path.lower()
+
+
+def _file_key(file_json):
+  return _make_file_key(file_json['path'])

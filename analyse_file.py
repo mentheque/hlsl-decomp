@@ -1,7 +1,7 @@
 import json
 
 from config import Config
-from utils import Repository
+from utils import Repository, file_stats, file_stats_key, _file_key, _make_file_key
 
 import hashlib
 
@@ -51,10 +51,10 @@ def _test_filename(filename):
   }
 
 import re
-def _compile_dict_patterns(dict, ignorecase = True):
+def _compile_dict_patterns(dict, flags = re.IGNORECASE):
   ret_dict = {}
   for key, patterns in dict.items():
-    ret_dict[key] = [(re.compile(pattern, re.IGNORECASE if ignorecase else re.NOFLAG), value)
+    ret_dict[key] = [(re.compile(pattern, flags), value)
                      for pattern, value in patterns]
 
   return ret_dict
@@ -302,13 +302,6 @@ def _save_repo_stats(config : Config, repo : Repository, repo_stats):
     json.dump(repo_stats, f)
 
 
-def _make_file_key(file_path : str):
-  return file_path.lower()
-
-
-def _file_key(file_json):
-  return _make_file_key(file_json['path'])
-
 
 def update_basic_stats(config : Config, repo : Repository, file_jsons, recalculate : bool = False):
   repo_stats = {}
@@ -336,7 +329,6 @@ def update_basic_stats(config : Config, repo : Repository, file_jsons, recalcula
     if (file_key in repo_stats and recalculate) or file_key not in repo_stats:
       try:
         repo_stats[file_key] = _calculate_file_stats(config, repo, file_json)
-        #Doesn't work somehow, even when the one above seem to assign the 4
         repo_stats[file_key]['includes'] = list(includes[file_key])
         changed = True
       except Exception as e:
@@ -361,11 +353,14 @@ def update_basic_stats(config : Config, repo : Repository, file_jsons, recalcula
 from license_scanning import _sort_file_conclusive, _filter_file_conclusive
 from config import LicenseGroup
 def calculate_license_stats(config : Config, walked):
+  config.log.licenses.primary("Saving file licenses")
   permissive, gpl, nonedet, other = \
     _sort_file_conclusive(config, _filter_file_conclusive(walked, store_empty_repos=True), store_empty_repos=True)
   for i in range(len(permissive)):
     repo = walked[i][0]
     repo_stats = load_repo_stats(config, repo)
+
+    config.log.licenses.secondary(f"Saving file licenses for {repo.full_name}")
 
     # Some files from file_jsons may be missing if errored on basic stat calculations, so ignoring them here
     for file_stat in repo_stats.values():
@@ -387,9 +382,14 @@ def calculate_license_stats(config : Config, walked):
 
     _save_repo_stats(config, repo, repo_stats)
 
+def _compile_ep_patterns(patterns, flags = re.IGNORECASE | re.DOTALL):
+  ret = {}
+  for shader_type in _shader_types:
+    ret[shader_type] = [re.compile(pattern, flags) for pattern in patterns[shader_type]]
 
+  return ret
 
-_entry_point_patterns = {
+_entry_point_patterns = _compile_ep_patterns({
   'pixel': [
     r'\b\w+\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*:\s*SV_Target\b',
     r'\b\w+\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*:\s*SV_Target\d+\b',
@@ -399,16 +399,30 @@ _entry_point_patterns = {
   ],
   'vertex': [],
   'compute': []
+})
+
+_default_ep_values = {
+  'pixel' : ['main'],
+  'vertex' : ['main'],
+  'compute' : ['main']
 }
 
 from itertools import chain
-from license_scanning import file_path_fstat
-def calculate_vanilla_compilation_parameters(config : Config, walked):
+from utils import CompilerTypes
+from compile import load_preprocessed_file
+from collections import defaultdict
+def calculate_vanilla_compilation_parameters(config : Config, walked, specific_shader_types = None,
+                                             excluded_repos : list = None, included_repos : list = None):
+  selected_shader_types = _shader_types if specific_shader_types is None else specific_shader_types
+
+  filter = lambda x : True
+  if excluded_repos is not None:
+    filter = lambda x: x not in excluded_repos
+  if included_repos is not None:
+    filter = lambda x: x in included_repos
+
   def flatten_uniquely(vlist):
     return list(set(chain.from_iterable(vlist)))
-
-  compiled = {}
-  compiled['pixel'] = [re.compile(pattern, re.IGNORECASE | re.DOTALL) for pattern in _entry_point_patterns['pixel'] ]
 
   def detect_pixel_ep(contents):
     struct_patterns = [r'\bstruct\s+(\w+)\s*\{[^}]*SV_Target[^}]*\}', r'\bstruct\s+(\w+)\s*\{[^}]*:\s*COLOR[^}]*\}']
@@ -421,32 +435,70 @@ def calculate_vanilla_compilation_parameters(config : Config, walked):
       [rf'\bvoid\s+([a-zA-Z_]\w*)\s*\([^)]*inout\s+{struct_name}\s+\w+[^)]*\)' for struct_name in structs],
       [rf'\bvoid\s+([a-zA-Z_]\w*)\s*\([^)]*out\s+{struct_name}\s+\w+[^)]*\)' for struct_name in structs],
     ])
-
     return flatten_uniquely([re.findall(pattern, contents, re.IGNORECASE | re.DOTALL) for pattern in patterns])
 
-  print("---- entry points ----")
+  additional_searches = {
+    'pixel' : detect_pixel_ep,
+    'vertex' : (lambda x : []),
+    'compute' : (lambda x : [])
+  }
 
+  failed_attempts = defaultdict(list)
+  successfull_attempts = defaultdict(list)
+
+  config.log.licenses.primary("Starting compilation parameters computation")
   for repo, file_jsons in walked:
+    if not filter(repo.full_name):
+      continue
+
+    config.log.licenses.secondary(f"Computing compilation parameters for {repo.full_name}")
+
     repo_stats = load_repo_stats(config, repo)
     for file_json, _ in file_jsons:
       file_stat = file_stats(repo_stats, file_json)
-      if file_stat['is_shader'] and file_stat['shader_type']['pixel'] > 0:
-        filepath = file_path_fstat(config, repo, file_stat)
-        normalised_contents = _normalise(filepath)
+      if file_stat['is_shader']:
+        per_compiler_contents = {
+          compiler_type: load_preprocessed_file(config, repo_stats, file_json, compiler_type)
+          for compiler_type in CompilerTypes
+        }
 
-        file_stat['entry_points'] = {}
-        file_stat['entry_points']['pixel'] = \
-          flatten_uniquely(
-            [[match[0] for match in comp.findall(normalised_contents)] for comp in compiled['pixel']] +
-            [detect_pixel_ep(normalised_contents)]
-          )
-        if len(file_stat['entry_points']['pixel']) == 0:
-          print(file_stat['case_sensitive_path'])
-def file_stats(repo_stats, file_json):
-  return file_stats_key(repo_stats, _file_key(file_json))
+        if 'entry_points' not in file_stat:
+          file_stat['entry_points'] = {}
 
-def file_stats_key(repo_stats, file_key):
-  return repo_stats[file_key]
+        for shader_type in selected_shader_types:
+          file_stat['entry_points'][shader_type] = []
+          if file_stat['shader_type'][shader_type] > 0:
+            for compiler_type in CompilerTypes:
+              contents = per_compiler_contents[compiler_type]
+              if contents is not None:
+                file_stat['entry_points'][shader_type] = \
+                  flatten_uniquely(
+                    [[match[0] for match in comp.findall(contents)] for comp in _entry_point_patterns[shader_type]] +
+                    [additional_searches[shader_type](contents)] +
+                    [file_stat['entry_points'][shader_type]]
+                  )
+
+            file_destination = successfull_attempts
+            if len(file_stat['entry_points'][shader_type]) == 0:
+              config.log.licenses.secondary(
+                f"Unable to find {shader_type} entry point for {file_stat['case_sensitive_path']}")
+              file_stat['entry_points'][shader_type] = _default_ep_values[shader_type]
+              file_destination = failed_attempts
+            else:
+              config.log.licenses.secondary(
+                f"Entry points for {file_stat['case_sensitive_path']} ({shader_type}):" +
+                f" {file_stat['entry_points'][shader_type]}")
+              file_destination = successfull_attempts
+            file_destination[shader_type].append(file_stat['case_sensitive_path'])
+
+    _save_repo_stats(config, repo, repo_stats)
+
+  for shader_type in _shader_types:
+    config.log.licenses.primary(f"For {shader_type}: {len(successfull_attempts[shader_type])} successfully found,"
+                                f" {len(failed_attempts[shader_type])} "
+                                f"failed{'.' if len(failed_attempts[shader_type]) == 0 else ':'} ")
+    for failure in failed_attempts[shader_type]:
+      config.log.licenses.secondary(failure)
 
 def file_has_stats_key(repo_stats, file_key):
   return file_key in repo_stats

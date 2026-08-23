@@ -95,6 +95,9 @@ def preprocess(config : Config, walked, only_specified = False):
 
         file_meta[compiler.name] = _success(subprocess_result)
         if not _success(subprocess_result):
+          config.log.compile.secondary(
+            f"Failed to preprocess {file_stats(repo_stats, file_json)['case_sensitive_path']}" +
+            f" with {compiler.name}: {subprocess_result.stderr}")
           empty_dict_if_absent(file_meta, 'errout')[compiler.name] = subprocess_result.stderr
 
 
@@ -128,6 +131,15 @@ def _preprocessed_file_path(config : Config, repo_stats, file_json, compiler : C
   return join_path(config.preprocessed_dir,
                    file_stats(repo_stats, file_json)['hash'] +
                    f"_{get_compiler_name(compiler)}")
+
+# TODO: mb read meta first, but overall same thing
+def load_preprocessed_file(config : Config, repo_stats, file_json, compiler : CompilerTypes):
+  try:
+    with open(_preprocessed_file_path(config, repo_stats, file_json, compiler), 'r', encoding='utf-8') as f:
+      content = f.read()
+    return content
+  except Exception as e:
+    return None
 
 def _preprocessed_meta_path(config : Config):
   return join_path(config.preprocessed_dir, 'meta.json')
