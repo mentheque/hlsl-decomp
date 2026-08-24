@@ -15,6 +15,7 @@
   ],
   "git_directory": "C:/Users/menth/Documents/cloned_repos3",
   "preprocessed_dir": "C:/Users/menth/Documents/preprocessed",
+  "compiled_dir": "C:/Users/menth/Documents/compiled",
   "scancode_cache_dir": "scancode2",
   "scancode_processes": 6,
   "licenses": [
@@ -102,6 +103,19 @@
       "asdfghjklt6/yms" : {
         "fxc" : ["/D", "VERTEX_SHADER", "/D", "PIXEL_SHADER", "/D", "COMPUTE_SHADER"],
         "dxc" : ["-D", "VERTEX_SHADER", "-D", "PIXEL_SHADER", "-D", "COMPUTE_SHADER"]
+      }
+    },
+    "compilation" : {
+      "__default__" : {
+
+      },
+      "QuirkyPlague/EscheridiaRT" : {
+        "dxc" : ["-HV", "2021", "-enable-16bit-types"]
+      },
+      "th4llium/Irradia-RT" : {
+        "dxc" : ["-HV", "2021", "-enable-16bit-types"]
+      },
+      "clshortfuse/renodx" : {
       }
     }
   }

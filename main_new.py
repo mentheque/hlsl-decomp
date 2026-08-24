@@ -1,3 +1,4 @@
+import compile
 import export
 import repository_lists
 from config import Config
@@ -170,7 +171,9 @@ from compile import preprocess
 
 #preprocess(config, all_good_licenses, only_specified=True)
 
-calculate_vanilla_compilation_parameters(config, all_good_licenses)#, specific_shader_types=['compute'],
+#calculate_vanilla_compilation_parameters(config, all_good_licenses)#, specific_shader_types=['compute'],
                                         # excluded_repos=['clshortfuse/renodx', 'NotVoosh/renodx-unity'])
 
 #export.export_base(config, filtered, rlist_variant = rlist_variant, name ="all_licenses_conclusive")
+
+compile.compile(config, all_good_licenses)

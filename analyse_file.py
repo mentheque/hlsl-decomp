@@ -115,7 +115,7 @@ def _test_categorical_patterns(categories, filename_patterns, contents_patterns,
 def _test_platforms(filename : str, file_contents: str):
   return _test_categorical_patterns(_platforms, _pfilename_patterns, _pcontents_patterns, filename, file_contents)
 
-_shader_types = ["pixel", "vertex", "compute"]
+from utils import _shader_types
 _stfilename_patterns = _compile_dict_patterns({
   "pixel": [(r'\.ps', 0.9),
             (r'\.pixel', 0.9),
@@ -443,10 +443,11 @@ _comptarget_patterns = _compile_ep_patterns({
 
 
 
-from compile import load_preprocessed_file
+
 from collections import defaultdict
 def calculate_vanilla_compilation_parameters(config : Config, walked, specific_shader_types = None,
                                              excluded_repos : list = None, included_repos : list = None):
+  from compile import load_preprocessed_file
   selected_shader_types = _shader_types if specific_shader_types is None else specific_shader_types
   def default_if_absent(dictionary, key, value):
     if key not in dictionary:

@@ -2,16 +2,18 @@ from config import Config
 from enum import Enum
 
 from analyse_file import load_repo_stats, file_stats
+from utils import _shader_types, empty_dict_if_absent
 
 import subprocess
 
 from utils import CompilerTypes
 class Compiler:
-  def __init__(self, name : str, type : CompilerTypes, preprocessing_arr_gen, version_arr):
+  def __init__(self, name : str, type : CompilerTypes, preprocessing_arr_gen, version_arr, compile_arr_gen):
     self.name = name
     self.type = type
     self._preprocessing_arr_gen = preprocessing_arr_gen
     self._version_arr = version_arr
+    self._compile_arr_gen = compile_arr_gen
 
   def _execute(self, cmd):
     return subprocess.run(cmd, capture_output=True, text=True, timeout=1000)
@@ -33,15 +35,27 @@ class Compiler:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     return self._execute(self._preprocessing_cmd(config, input_path, output_path, additional))
 
+  def compile(self, config : Config, input_path, output_path, compilation_target : str, entry_point = None, additional = []):
+    compilation_target = compilation_target.replace('x', '0')
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    return self._execute(self._command(config,
+                                       self._compile_arr_gen(output_path, compilation_target, entry_point) +
+                                       additional + [input_path]))
+
+def new_compile_arr_gen(target_cmd, file_out_cmd, ep_command):
+  return \
+    lambda op, comptarget, ep : [target_cmd, comptarget, file_out_cmd, op] + ([] if ep is None else [ep_command, ep])
 
 
 _compilers = {
   CompilerTypes.FXC : Compiler('fxc', CompilerTypes.FXC,
                                preprocessing_arr_gen = lambda op: ['/P', op],
-                               version_arr = ['/?']),
+                               version_arr = ['/?'],
+                               compile_arr_gen=new_compile_arr_gen('/T', '/Fo', '/E')),
   CompilerTypes.DXC : Compiler('dxc', CompilerTypes.DXC,
                                preprocessing_arr_gen = lambda op: ['-P', op],
-                               version_arr = ['--version'])
+                               version_arr = ['--version'],
+                               compile_arr_gen=new_compile_arr_gen('-T', '-Fo', '-E'))
 }
 
 from license_scanning import file_path
@@ -50,11 +64,6 @@ def _success(subprocess_result):
   return subprocess_result.returncode == 0
 
 def preprocess(config : Config, walked, only_specified = False):
-  def empty_dict_if_absent(dictionary, key):
-    if key not in dictionary:
-      dictionary[key] = {}
-    return dictionary[key]
-
   meta = load_prep_meta(config)
 
   versions = {
@@ -113,16 +122,27 @@ _comp_step_name = {
 }
 
 from utils import Repository
-def _additional_directives(config : Config, repo : Repository, step : CompStep, compiler : CompilerTypes):
+def _additional_directives(config : Config, repo : Repository, step : CompStep, compiler : CompilerTypes,
+                           file_stat = None):
+  def attempt_loading(step_name, item_name, compiler_name):
+    if step_name in config.compile_directives \
+            and item_name in config.compile_directives[step_name] \
+            and compiler_name in config.compile_directives[step_name][item_name]:
+      return config.compile_directives[step_name][repo.full_name][compiler_name]
+    return None
+
+  def default_if_none(value, default):
+    return default if value is None else value
+
   step_name = _comp_step_name[step]
   repo_name = repo.full_name
   compiler_name = get_compiler_name(compiler)
-  if step_name in config.compile_directives \
-    and repo_name in config.compile_directives[step_name] \
-    and compiler_name in config.compile_directives[step_name][repo_name]:
-    return config.compile_directives[step_name][repo.full_name][compiler_name]
 
-  return []
+  out = default_if_none(attempt_loading(step_name, repo_name, compiler_name),
+                        default = attempt_loading(step_name, "__default__", compiler_name))
+  if file_stat is not None:
+    out = default_if_none(attempt_loading(step_name, file_stat['case_sensitive_path'], compiler_name), out)
+  return default_if_none(out, [])
 
 
 
@@ -161,3 +181,172 @@ def _save_prep_meta(config : Config, meta):
 
 def get_compiler_name(compiler : CompilerTypes):
   return _compilers[compiler].name
+
+def _compiler_type_from_target(comptarget : str) -> CompilerTypes:
+  if int(comptarget.split('_')[1]) > 5:
+    return CompilerTypes.DXC
+  return CompilerTypes.FXC
+
+class ProfileTypes(Enum):
+  Pixel = "ps"
+  Vertex = "vs"
+  Compute = "cs"
+  Library = "lib"
+
+_profile_types = {
+  "pixel": ProfileTypes.Pixel,
+  "vertex": ProfileTypes.Vertex,
+  "compute": ProfileTypes.Compute,
+  "library": ProfileTypes.Library
+}
+
+# TODO: Move to config json
+_comptarget_versions = {
+  ProfileTypes.Pixel : {
+    2 : [0],
+    3 : [0],
+    4 : [0, 1],
+    5 : [0, 1],
+    6 : [0, 3, 6]
+  },
+  ProfileTypes.Vertex : {
+    2: [0],
+    3: [0],
+    4: [0, 1],
+    5: [0, 1],
+    6: [0, 3, 6]
+  },
+  ProfileTypes.Compute : {
+    4: [0, 1],
+    5: [0, 1],
+    6: [0, 3, 6]
+  },
+  ProfileTypes.Library : {
+    4: [0, 1],
+    5: [0],
+    6: [0, 3, 6]
+  }
+}
+
+_hv_variants = ['2016', '2018', '2021']
+
+_comptarget_full_list = {
+  profile_type: [f"{profile_type.value}_{version}_{subversion}"
+                 for version, subversions in _comptarget_versions[profile_type].items()
+                 for subversion in subversions
+                 ]
+  for profile_type in ProfileTypes
+}
+
+def _compiled_file_path(config : Config, repo_stats, file_json, comptarged, entry_point = None):
+  return join_path(config.compiled_dir,
+            file_stats(repo_stats, file_json)['hash'] +
+            f"_{comptarged}_{'' if entry_point is None else entry_point}")
+
+def _compile_meta_path(config : Config):
+  return join_path(config.compiled_dir, 'meta.json')
+
+def compile(config : Config, walked, skip_successful = False):
+  config.log.compile.primary("Starting file compilation")
+  meta = load_compile_meta(config)
+
+  def handle_shader_type(shader_type, file_stat, file_json, repo, repo_meta, dxc_additionals = [],
+                         skip_non_dxc = False):
+    file_profile_meta = empty_dict_if_absent(empty_dict_if_absent(repo_meta, file_stat['hash']), shader_type)
+
+    profile = _profile_types[shader_type]
+    comptargets = \
+      file_stat['compilation_targets'][shader_type] if shader_type in file_stat['compilation_targets'] else []
+    if len(comptargets) == 0:
+      comptargets = _comptarget_full_list[profile]
+
+    failures = empty_dict_if_absent(file_profile_meta, 'failures')
+    successes = empty_dict_if_absent(file_profile_meta, 'successes')
+
+    for comptarget in comptargets:
+      for entry_point in \
+              (file_stat['entry_points'][shader_type] if shader_type in file_stat['entry_points'] else [None]):
+        if entry_point in successes:
+          continue
+
+        compiler = _compilers[_compiler_type_from_target(comptarget)]
+
+        if skip_non_dxc and compiler.type != CompilerTypes.DXC:
+          continue
+
+        addiionals = _additional_directives(config, repo, CompStep.Compilation, compiler.type, file_stat) + \
+          (dxc_additionals if compiler.type == CompilerTypes.DXC else [])
+        subprocess_result = compiler.compile(
+          config,
+          _preprocessed_file_path(config, repo_stats, file_json, compiler.type),
+          _compiled_file_path(config, repo_stats, file_json, comptarget, entry_point),
+          comptarget,
+          entry_point,
+          addiionals
+        )
+        if subprocess_result.returncode != 0:
+          empty_dict_if_absent(failures, entry_point)[comptarget] = \
+            (subprocess_result.stderr, compiler.name, addiionals)
+        else:
+          config.log.compile.secondary(f"Success: {file_stat['case_sensitive_path']} {entry_point} {comptarget}")
+          successes[entry_point] = (comptarget, compiler.name, addiionals)
+
+    return len(successes) > 0
+
+  def iterate_over_hv(shader_type, file_stat, file_json, repo, repo_meta):
+    for hv_variant in _hv_variants:
+      # Try all language versions for dxc, but run fxc only on the first one
+      if handle_shader_type(shader_type, file_stat, file_json, repo, repo_meta,
+                            dxc_additionals=['-HV', hv_variant], skip_non_dxc=(hv_variant == _hv_variants[0])):
+        break
+
+  for repo, file_jsons in walked:
+    config.log.compile.primary(f"Starting file compilations for {repo.full_name}")
+    repo_stats = load_repo_stats(config, repo)
+    repo_meta = empty_dict_if_absent(meta, repo.full_name)
+
+    for file_json, _ in file_jsons:
+      file_stat = file_stats(repo_stats, file_json)
+      file_meta = empty_dict_if_absent(repo_meta, file_stat['hash'])
+      if skip_successful and any(profile_type in file_meta and
+                                 len(file_meta[profile_type]['successes']) > 0 for profile_type in _profile_types.keys()):
+        continue
+
+      for shader_type in _shader_types:
+        if file_stat['shader_type'][shader_type] > 0:
+          file_meta[shader_type] = {} # if don't want to redo just pick skip_successfull = True
+          iterate_over_hv(shader_type, file_stat, file_json, repo, repo_meta)
+
+
+
+      if not any(shader_type in file_meta and
+                 len(file_meta[shader_type]['successes']) > 0 for shader_type in _shader_types):
+        iterate_over_hv('library', file_stat, file_json, repo, repo_meta)
+        if len(file_meta['library']['successes']) == 0:
+          config.log.compile.secondary(f"! Zero successful compilations for {file_stat['case_sensitive_path']}")
+          for profile_type, eps in file_meta.items():
+            config.log.compile.secondary(f"{profile_type}: ")
+            for failed_ep, attempts in eps['failures'].items():
+              config.log.compile.secondary(f"-- {failed_ep}: ")
+              for attempted_target, result in attempts.items():
+                config.log.compile.secondary(f"-- -- {attempted_target}: {result[0]}")
+    _save_compile_meta(config, meta)
+
+
+
+
+
+# TODO: fix copypaste
+def load_compile_meta(config : Config):
+  try:
+    with open(_compile_meta_path(config), "r") as f:
+      return json.load(f)
+  except Exception as e:
+    config.log.licenses.primary(f"Unable to load compile meta data, returning empty")
+    return {}
+
+def _save_compile_meta(config : Config, meta):
+  path = _compile_meta_path(config)
+  path.parent.mkdir(parents=True, exist_ok=True)
+  with open(path, "w") as f:
+    json.dump(meta, f)

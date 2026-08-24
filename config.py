@@ -50,7 +50,8 @@ class Config:
     'preprocessed_dir' : "preprocessed",
     'compile_directives' : {},
     'fxc_path' : 'fxc',
-    'dxc_path' : 'dxc'
+    'dxc_path' : 'dxc',
+    'compiled_dir': "compiled"
   }
   def __init__(self,
                language,
@@ -68,7 +69,8 @@ class Config:
                preprocessed_dir = "preprocessed",
                compile_directives = {},
                fxc_path = 'fxc',
-               dxc_path = 'dxc'):
+               dxc_path = 'dxc',
+               compiled_dir = "compiled"):
     self.language = language
     self.github_token = github_token
     self.file_extensions = target_file_extensions
@@ -101,6 +103,7 @@ class Config:
       CompilerTypes.FXC: fxc_path,
       CompilerTypes.DXC: dxc_path
     }
+    self.compiled_dir = compiled_dir
 
 
 from logs import EchoLogger, PrefixedLogger
@@ -154,6 +157,7 @@ def load_config(path ='config.json') -> Config:
     compile_directives = get_or_default('compile_directives'),
     fxc_path=get_or_default('fxc_path'),
     dxc_path=get_or_default('dxc_path'),
+    compiled_dir=get_or_default('compiled_dir')
   )
 
 
@@ -230,7 +234,8 @@ _verifyers = {
       'preprocessed_dir' : 'str',
       'compile_directives' : 'compile_directives_all',
       'fxc_path' : 'str',
-      'dxc_path' : 'str'
+      'dxc_path' : 'str',
+      'compiled_dir' : 'str'
     }
   ),
 

@@ -50,3 +50,10 @@ def _file_key(file_json):
 from itertools import chain
 def flatten_uniquely(vlist):
   return list(set(chain.from_iterable(vlist)))
+
+_shader_types = ["pixel", "vertex", "compute"]
+
+def empty_dict_if_absent(dictionary, key):
+  if key not in dictionary:
+    dictionary[key] = {}
+  return dictionary[key]
