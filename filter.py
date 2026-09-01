@@ -75,13 +75,22 @@ def new_filter_selected_licenses(license_groups, filter_includes = False):
                                                   or file_stats(repo_stats, file_json)['worst_included_license']
                                                   in license_groups)))
 
-def filter(config : Config, walked, filters):
+class FilterBlacklisted:
+  Blacklisted = 0
+
+def _handle_blacklisted(config: Config, repo: Repository, blackfilter : FilterBlacklisted):
+  if blackfilter == FilterBlacklisted.Blacklisted:
+    return repo.full_name in config.blacklisted_repos
+  return False
+
+def filter(config : Config, walked, filters, blacklist_filters = []):
   filtered = []
   for repo, file_license_pairs in walked:
     repo_stats = load_repo_stats(config, repo)
     repo_filtered = []
     for file, license in file_license_pairs:
-      if not any(filter(repo_stats, file) for filter in filters):
+      if not (any(filter(repo_stats, file) for filter in filters)
+              or any(_handle_blacklisted(config, repo, bfilter) for bfilter in blacklist_filters)):
         repo_filtered.append((file, license))
 
     if len(repo_filtered) > 0:

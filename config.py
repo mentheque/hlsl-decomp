@@ -51,7 +51,10 @@ class Config:
     'compile_directives' : {},
     'fxc_path' : 'fxc',
     'dxc_path' : 'dxc',
-    'compiled_dir': "compiled"
+    'compiled_dir': "compiled",
+    'blacklisted_repos' : [],
+    'decompile_directives': {},
+    'decompiled_dir': 'decompiled'
   }
   def __init__(self,
                language,
@@ -70,7 +73,10 @@ class Config:
                compile_directives = {},
                fxc_path = 'fxc',
                dxc_path = 'dxc',
-               compiled_dir = "compiled"):
+               compiled_dir = "compiled",
+               blacklisted_repos = [],
+               decompile_directives = {},
+               decompiled_dir ="decompiled"):
     self.language = language
     self.github_token = github_token
     self.file_extensions = target_file_extensions
@@ -104,6 +110,10 @@ class Config:
       CompilerTypes.DXC: dxc_path
     }
     self.compiled_dir = compiled_dir
+
+    self.blacklisted_repos = blacklisted_repos
+    self.decompile_directives = decompile_directives
+    self.decompiled_dir = decompiled_dir
 
 
 from logs import EchoLogger, PrefixedLogger
@@ -157,7 +167,10 @@ def load_config(path ='config.json') -> Config:
     compile_directives = get_or_default('compile_directives'),
     fxc_path=get_or_default('fxc_path'),
     dxc_path=get_or_default('dxc_path'),
-    compiled_dir=get_or_default('compiled_dir')
+    compiled_dir=get_or_default('compiled_dir'),
+    blacklisted_repos=get_or_default('blacklisted_repos'),
+    decompile_directives=get_or_default('decompile_directives'),
+    decompiled_dir=get_or_default('decompiled_dir')
   )
 
 
@@ -235,7 +248,10 @@ _verifyers = {
       'compile_directives' : 'compile_directives_all',
       'fxc_path' : 'str',
       'dxc_path' : 'str',
-      'compiled_dir' : 'str'
+      'compiled_dir' : 'str',
+      'blacklisted_repos' : 'str_list',
+      'decompile_directives' : 'decomp_directives_all',
+      'decompiled_dir' : 'str'
     }
   ),
 
@@ -254,5 +270,13 @@ _verifyers = {
       'preprocessing' : 'compile_step_additionals',
       'compilation'   : 'compile_step_additionals'
     }
-  )
+  ),
+  'additional_decomp' : _schema_verifier(
+    {},
+    {
+      'amd': 'str_list',
+      'intel': 'str_list'
+    }
+  ),
+  'decomp_directives_all': _dict_verifier('additional_decomp'),
 }

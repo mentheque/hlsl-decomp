@@ -52,6 +52,7 @@ def flatten_uniquely(vlist):
   return list(set(chain.from_iterable(vlist)))
 
 _shader_types = ["pixel", "vertex", "compute"]
+_shader_types_ext = _shader_types + ['library']
 
 def empty_dict_if_absent(dictionary, key):
   if key not in dictionary:

@@ -63,7 +63,7 @@ from license_scanning import file_path
 def _success(subprocess_result):
   return subprocess_result.returncode == 0
 
-def preprocess(config : Config, walked, only_specified = False):
+def preprocess(config : Config, walked, only_specified = False, only_missing = False):
   meta = load_prep_meta(config)
 
   versions = {
@@ -89,6 +89,9 @@ def preprocess(config : Config, walked, only_specified = False):
       add_directives = _additional_directives(config, repo, CompStep.Preprocessing, compiler.type)
 
       for file_json, _ in file_jsons:
+        if only_missing and has_preprocessed_file(config, repo_stats, file_json, compiler.type):
+          continue
+
         file_meta = empty_dict_if_absent(meta, file_stats(repo_stats, file_json)['hash'])
         empty_dict_if_absent(file_meta, 'versions')
         empty_dict_if_absent(file_meta, 'additional_directives')
@@ -160,6 +163,10 @@ def load_preprocessed_file(config : Config, repo_stats, file_json, compiler : Co
     return content
   except Exception as e:
     return None
+
+import os
+def has_preprocessed_file(config : Config, repo_stats, file_json, compiler : CompilerTypes):
+  return os.path.isfile(_preprocessed_file_path(config, repo_stats, file_json, compiler))
 
 def _preprocessed_meta_path(config : Config):
   return join_path(config.preprocessed_dir, 'meta.json')
@@ -238,10 +245,10 @@ _comptarget_full_list = {
   for profile_type in ProfileTypes
 }
 
-def _compiled_file_path(config : Config, repo_stats, file_json, comptarged, entry_point = None):
+def _compiled_file_path(config : Config, repo_stats, file_json, comptarged, entry_point = None, spirv = False):
   return join_path(config.compiled_dir,
             file_stats(repo_stats, file_json)['hash'] +
-            f"_{comptarged}_{'' if entry_point is None else entry_point}")
+            f"_{comptarged}_{'' if entry_point is None else entry_point}{'_spirv' if spirv else ''}")
 
 def _compile_meta_path(config : Config):
   return join_path(config.compiled_dir, 'meta.json')
@@ -274,22 +281,52 @@ def compile(config : Config, walked, skip_successful = False):
         if skip_non_dxc and compiler.type != CompilerTypes.DXC:
           continue
 
-        addiionals = _additional_directives(config, repo, CompStep.Compilation, compiler.type, file_stat) + \
+        additionals = _additional_directives(config, repo, CompStep.Compilation, compiler.type, file_stat) + \
           (dxc_additionals if compiler.type == CompilerTypes.DXC else [])
         subprocess_result = compiler.compile(
           config,
           _preprocessed_file_path(config, repo_stats, file_json, compiler.type),
-          _compiled_file_path(config, repo_stats, file_json, comptarget, entry_point),
+          _compiled_file_path(config, repo_stats, file_json, comptarget, entry_point, spirv=False),
           comptarget,
           entry_point,
-          addiionals
+          additionals
         )
         if subprocess_result.returncode != 0:
           empty_dict_if_absent(failures, entry_point)[comptarget] = \
-            (subprocess_result.stderr, compiler.name, addiionals)
+            (subprocess_result.stderr, compiler.name, additionals)
         else:
           config.log.compile.secondary(f"Success: {file_stat['case_sensitive_path']} {entry_point} {comptarget}")
-          successes[entry_point] = (comptarget, compiler.name, addiionals)
+          spirv_data = None
+          if compiler.type == CompilerTypes.DXC and shader_type != 'library':
+            target_enviroments = ['vulkan1.0', 'vulkan1.1', 'vulkan1.2', 'vulkan1.3']
+            layouts = [None, '-fvk-use-dx-layout', '-fvk-use-gl-layout']
+            spirv_errors = []
+            for target_env in target_enviroments:
+              for layout in layouts:
+                spirv_additionals = ['-spirv', f'-fspv-target-env={target_env}'] +\
+                                    ([layout] if layout is not None else [])
+                spirv_result = compiler.compile(
+                  config,
+                  _preprocessed_file_path(config, repo_stats, file_json, compiler.type),
+                  _compiled_file_path(config, repo_stats, file_json, comptarget, entry_point, spirv=True),
+                  comptarget,
+                  entry_point,
+                  additionals + spirv_additionals
+                )
+                if spirv_result.returncode == 0:
+                  spirv_data = (True, spirv_additionals)
+                  break
+                else:
+                  spirv_errors.append((spirv_additionals, spirv_result.stderr))
+              if spirv_data is not None:
+                break
+
+            if spirv_data is None:
+              config.log.compile.secondary(f"! But failed spirv: {spirv_errors}")
+              spirv_data = (False, spirv_errors)
+            else:
+              config.log.compile.secondary(f"Spirv generated also, env={spirv_data[1]}")
+          successes[entry_point] = (comptarget, compiler.name, additionals, spirv_data)
 
     return len(successes) > 0
 
@@ -350,3 +387,38 @@ def _save_compile_meta(config : Config, meta):
   path.parent.mkdir(parents=True, exist_ok=True)
   with open(path, "w") as f:
     json.dump(meta, f)
+
+# TODO: fix copypaste
+def _decompile_meta_path(config : Config):
+  return join_path(config.decompiled_dir, "meta.json")
+
+def load_decompile_meta(config : Config):
+  try:
+    with open(_decompile_meta_path(config), "r") as f:
+      return json.load(f)
+  except Exception as e:
+    config.log.licenses.primary(f"Unable to load decompile meta data, returning empty")
+    return {}
+
+def _save_decompile_meta(config : Config, meta):
+  path = _decompile_meta_path(config)
+  path.parent.mkdir(parents=True, exist_ok=True)
+  with open(path, "w") as f:
+    json.dump(meta, f)
+
+class Decompilers(Enum):
+  AMD = 0
+  INTEL = 1
+
+def decompile(config: Config, walked, decompilers = list(Decompilers)):
+  out_meta = load_decompile_meta(config)
+  compiled_meta = load_compile_meta(config)
+  for repo, file_jsons in walked:
+    if repo.full_name in compiled_meta:
+      compiled_meta_repo = compiled_meta[repo.full_name]
+      repo_stats = load_repo_stats(config, repo)
+      for file_json, _ in file_jsons:
+        file_stat = file_stats(repo_stats, file_json)
+        if file_stat['hash'] in compiled_meta_repo:
+          continue
+

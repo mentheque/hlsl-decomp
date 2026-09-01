@@ -81,7 +81,7 @@
     }
   ],
   "fxc_path" : "C:/Program Files (x86)/Windows Kits/10/bin/10.0.22621.0/x64/fxc.exe",
-  "dxc_path" : "C:/Program Files (x86)/Windows Kits/10/bin/10.0.22621.0/x64/dxc.exe",
+  "dxc_path" : "C:/Users/menth/Downloads/dxc_2026_08_11/bin/x64/dxc.exe",
   "compile_directives" : {
     "preprocessing" : {
       "leotorrez/ZZMI-Package" : {
@@ -118,5 +118,24 @@
       "clshortfuse/renodx" : {
       }
     }
-  }
+  },
+  "blacklisted_repos" : [
+    "erikgeo/msfs_g36_project",
+    "TheNathannator/cool-waves",
+    "guifarias31/msfs_tbm930_project",
+    "thisisyusuf/A330-900-NEO",
+    "ludolpif/shadertastic-effects",
+    "GPUthesteve/FSXP3D_effects_revamped",
+    "SharkShooter/uAnime4K",
+    "flybywiresim/aircraft-large-files",
+    "Lion-Rock-Aviation/Lion-Rock-Aviation-Model-Matching",
+    "veka0/mcrtx-shader-template",
+    "ASTteam01/TU204",
+    "paullewallencom/javafx-978-1-8471-9894-5",
+    "Calrissian97/swbf2-modding-assistant",
+    "urbancamo/fx870p-emulator",
+    "UNIX228/NEOVIA-mods",
+    "tonykwok/jfxtras-legacy",
+    "Blinue/Magpie"
+  ]
 }

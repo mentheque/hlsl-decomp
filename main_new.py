@@ -1,6 +1,7 @@
 import compile
 import export
 import repository_lists
+import stats
 from config import Config
 from user_dialoge import query, invalid_to_no, terminate, terminate_on_fail, no_to_invalid
 
@@ -62,12 +63,11 @@ walked, _ = _walk_repos(config, rlist)
 from analyse_file import update_basic_stats, load_repo_stats
 from analyse_file import calculate_license_stats
 
-recalc_stats = False
+#recalc_stats = False
 
 if recalc_stats:
   for repo, file_jsons in walked:
     update_basic_stats(config, repo, [fj[0] for fj in file_jsons], recalculate=recalc_stats)
-
   calculate_license_stats(config, walked)
 
 # for repo, file_jsons in walked:
@@ -138,14 +138,14 @@ from filter import new_filter_file_extensions, new_filter_platform, new_filter_s
 no_platform = filter(config, filtered, [new_no_platform()])
 
 
-from filter import new_filter_selected_licenses
+from filter import new_filter_selected_licenses, FilterBlacklisted
 from config import LicenseGroup
 
 all_good_licenses = filter(config, no_platform,
                            [new_filter_selected_licenses(
                              [LicenseGroup.Permissive, LicenseGroup.GPL, LicenseGroup.NoIncludes],
-                             filter_includes=True
-                           )])
+                             filter_includes=True)],
+                           [FilterBlacklisted.Blacklisted])
 from analyse_file import calculate_vanilla_compilation_parameters
 
 permissive, gpl, nonedet, other = _sort_file_conclusive(config, all_good_licenses)
@@ -156,11 +156,12 @@ print(f"permissive: {len(flatten_removing_repos(permissive))}, gpl : {len(flatte
 
 from analyse_file import file_stats
 for repo, file_jsons in all_good_licenses:
-  if recalc_stats:
-    update_basic_stats(config, repo, [fj[0] for fj in file_jsons], recalculate=recalc_stats)
   repo_stats = load_repo_stats(config, repo)
 
   for file_json, _ in file_jsons:
+    if file_stats(repo_stats, file_json)['hash'] == '82a697181118d6e81a8161fe85b3e2d4618f78c1b6b647926fe14091320b303e':
+      print("Should be here!!")
+
     if file_stats(repo_stats, file_json)['hash'] == 'be3f29cfb82ea841cbb5f2bf2675161917707db2fa5f20223e3bbd52d1e17b8b' \
       or file_stats(repo_stats, file_json)['worst_included_license'] \
       not in [LicenseGroup.Permissive, LicenseGroup.GPL, LicenseGroup.NoIncludes]:
@@ -169,11 +170,15 @@ for repo, file_jsons in all_good_licenses:
 
 from compile import preprocess
 
-#preprocess(config, all_good_licenses, only_specified=True)
+#preprocess(config, all_good_licenses, only_missing=True)
 
-#calculate_vanilla_compilation_parameters(config, all_good_licenses)#, specific_shader_types=['compute'],
+#calculate_vanilla_compilation_parameters(config, all_good_licenses, specific_shader_types=['compute', 'vertex'])
+                                        #, specific_shader_types=['compute'],
                                         # excluded_repos=['clshortfuse/renodx', 'NotVoosh/renodx-unity'])
 
 #export.export_base(config, filtered, rlist_variant = rlist_variant, name ="all_licenses_conclusive")
 
 compile.compile(config, all_good_licenses)
+
+stats.stats(config, all_good_licenses)
+
