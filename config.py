@@ -54,7 +54,9 @@ class Config:
     'compiled_dir': "compiled",
     'blacklisted_repos' : [],
     'decompile_directives': {},
-    'decompiled_dir': 'decompiled'
+    'decompiled_dir': 'decompiled',
+    'isa_devices' : {},
+    'decompilator_paths' : {}
   }
   def __init__(self,
                language,
@@ -76,7 +78,9 @@ class Config:
                compiled_dir = "compiled",
                blacklisted_repos = [],
                decompile_directives = {},
-               decompiled_dir ="decompiled"):
+               decompiled_dir ="decompiled",
+               decompilator_paths = {},
+               isa_devices = {}):
     self.language = language
     self.github_token = github_token
     self.file_extensions = target_file_extensions
@@ -114,6 +118,9 @@ class Config:
     self.blacklisted_repos = blacklisted_repos
     self.decompile_directives = decompile_directives
     self.decompiled_dir = decompiled_dir
+
+    self.decompilator_paths = decompilator_paths
+    self.isa_devices = isa_devices
 
 
 from logs import EchoLogger, PrefixedLogger
@@ -170,15 +177,18 @@ def load_config(path ='config.json') -> Config:
     compiled_dir=get_or_default('compiled_dir'),
     blacklisted_repos=get_or_default('blacklisted_repos'),
     decompile_directives=get_or_default('decompile_directives'),
-    decompiled_dir=get_or_default('decompiled_dir')
+    decompiled_dir=get_or_default('decompiled_dir'),
+    decompilator_paths=get_or_default('decompilator_paths'),
+    isa_devices=get_or_default('isa_devices')
   )
 
 
 def _type_verifier(type):
   return (lambda x : isinstance(x, type))
 
-def _list_verifier(member_verifier_key):
-  return (lambda l: isinstance(l, list) and all(_verifyers[member_verifier_key](mem) for mem in l))
+def _list_verifier(member_verifier_key, non_empty = False):
+  return (lambda l: isinstance(l, list) and all(_verifyers[member_verifier_key](mem) for mem in l)
+                    and (not non_empty or len(l) > 0))
 
 def _dict_verifier(member_verifier_key):
   return (lambda d: isinstance(d, dict) and all(_verifyers[member_verifier_key](mem) for mem in d.values()))
@@ -214,6 +224,8 @@ def _specific_values_verifier(permitted_values):
 
 _str_verifier = _type_verifier(str)
 
+
+from utils import Decompilators
 _verifyers = {
   'str' : _str_verifier,
   'int' : _type_verifier(int),
@@ -251,7 +263,9 @@ _verifyers = {
       'compiled_dir' : 'str',
       'blacklisted_repos' : 'str_list',
       'decompile_directives' : 'decomp_directives_all',
-      'decompiled_dir' : 'str'
+      'decompiled_dir' : 'str',
+      'isa_devices' : 'isa_devices',
+      'decompilator_paths' : 'decompilator_paths'
     }
   ),
 
@@ -271,12 +285,34 @@ _verifyers = {
       'compilation'   : 'compile_step_additionals'
     }
   ),
-  'additional_decomp' : _schema_verifier(
+  'decomp_directives_all' : _schema_verifier(
     {},
     {
-      'amd': 'str_list',
-      'intel': 'str_list'
+      decompilator.value: 'str_list'
+      for decompilator in Decompilators
     }
   ),
-  'decomp_directives_all': _dict_verifier('additional_decomp'),
+  'str_list_nonempty': _list_verifier('str', non_empty=True),
+  'directx_dependent_devices' : _schema_verifier(
+    {
+      'dx11' : 'str_list_nonempty',
+      'dx12' : 'str_list_nonempty'
+    },
+    {}
+  ),
+  #TODO : Fix copypaste
+  'isa_devices': _schema_verifier(
+    {},
+    {
+      decompilator.value: 'directx_dependent_devices'
+      for decompilator in Decompilators
+    }
+  ),
+  'decompilator_paths' : _schema_verifier(
+    {},
+    {
+      decompilator.value: 'str'
+      for decompilator in Decompilators
+    }
+  )
 }

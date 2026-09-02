@@ -97,7 +97,8 @@ _csv_structure = OrderedDict([
   ('includes', _new_map_include_to_stat('case_sensitive_path', transform_if_not_present = (lambda x: x))),
   ('includes_hash', _new_map_include_to_stat('hash')),
   ('worst_included_license', _new_get_stat('worst_included_license', transform=_license_mapping.get)),
-  ('archive_location', _get_license_prefix)
+  ('archive_location', _get_license_prefix),
+  ('compiled', _new_get_stat('compiled')),
 ])
 
 import zipfile

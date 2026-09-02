@@ -406,11 +406,59 @@ def _save_decompile_meta(config : Config, meta):
   with open(path, "w") as f:
     json.dump(meta, f)
 
-class Decompilers(Enum):
-  AMD = 0
-  INTEL = 1
+def _directx_version(comptarget: str) -> int:
+  split = comptarget.split('_')
+  major = int(split[1])
+  minor = split[2]
+  if major <= 3:
+    return 9
+  elif major == 4:
+    return 10
+  elif major == 5:
+    if minor in ['x', '0']:
+      return 11
+    else:
+      return 12
+  else:
+    return 12
 
-def decompile(config: Config, walked, decompilers = list(Decompilers)):
+
+from utils import _shader_types_ext, Decompilators
+def decompile(config: Config, walked, decompilators = None):
+  config.log.compile.primary("Starting decompilation")
+  if decompilators is None:
+    decompilators = [Decompilators(decomp_name) for decomp_name in config.isa_devices.keys()]
+  else:
+    for decomp in decompilators:
+      #TODO: fix copypastte
+      if decomp.value not in config.isa_devices:
+        config.log.compile.primary(f"Target devices not provided for {decomp.value}. Aborting")
+        return
+      if decomp.value not in config.decompilator_paths:
+        config.log.compile.primary(f"Executable path not provided for {decomp.value}. Aborting")
+        return
+  def map_dx_versions(dxv : int):
+    if dxv <= 11:
+      return 11
+    return 12
+
+  def get_decompile_additionals(decompilator : Decompilators):
+    return config.decompile_directives.get(decompilator.value, [])
+
+  def decompiled_files_prefix(file_stat, comptarget, entry_point, decompiler : Decompilators):
+    producer = 'amd' if decompiler == Decompilators.RGA else 'intel'
+    return join_path(config.decompiled_dir,
+                     f"{producer}/{file_stat['hash']}_{comptarget}_{entry_point if entry_point is not None else _}_")
+  command_generators = {
+    Decompilators.RGA: (lambda dx_version, comptarget, entry_point, devices, additionals, input_path :
+                        ['-s', f'dx{dx_version}',
+                         f"--{comptarget.split('_')[0]}-blob", input_path,
+                         '--all-model', comptarget.replace('x', '0')[3:],
+                         f"--{comptarget.split('_')[0]}-entry", entry_point,
+                         '--asic', ','.join(devices)]
+                        + additionals + ['--isa'])
+  }
+
   out_meta = load_decompile_meta(config)
   compiled_meta = load_compile_meta(config)
   for repo, file_jsons in walked:
@@ -420,5 +468,32 @@ def decompile(config: Config, walked, decompilers = list(Decompilers)):
       for file_json, _ in file_jsons:
         file_stat = file_stats(repo_stats, file_json)
         if file_stat['hash'] in compiled_meta_repo:
-          continue
+          file_comp_meta = compiled_meta_repo[file_stat['hash']]
+          for shader_type in _shader_types_ext:
+            if shader_type in file_comp_meta:
+              for entry_point, info in file_comp_meta[shader_type]['successes'].items():
+                comptarget, compiler_name, _, spirv_info = info
+                dx_version = map_dx_versions(_directx_version(comptarget))
+                for decomp in decompilators:
+                  if decomp == Decompilators.RGA:
+                    decomp_name = decomp.value
+                    decomp_result = subprocess.run(
+                      [config.decompilator_paths[decomp_name]] +
+                      command_generators[decomp](dx_version,
+                                                 comptarget,
+                                                 entry_point,
+                                                 config.isa_devices[decomp_name][f'dx{dx_version}'],
+                                                 get_decompile_additionals(decomp),
+                                                 _compiled_file_path(config, repo_stats, file_json, comptarget,
+                                                                     entry_point, spirv=False)) +
+                      [decompiled_files_prefix(file_stat, comptarget, entry_point, decomp)],
+                      capture_output = True, text = True, timeout = 1000
+                    )
+                    if decomp_result.returncode == 0:
+                      print("SUCC")
+                    else:
+                      print(decomp_result.stderr)
+
+
+
 

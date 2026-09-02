@@ -137,5 +137,18 @@
     "UNIX228/NEOVIA-mods",
     "tonykwok/jfxtras-legacy",
     "Blinue/Magpie"
-  ]
+  ],
+  "decompiled_dir" : "C:/Users/menth/Documents/decompiled",
+  "decompilator_paths" : {
+    "rga" : "C:/Users/menth/Downloads/RadeonDeveloperToolSuite-2026-05-28-1806/rga"
+  },
+  "isa_devices" : {
+    "rga" : {
+      "dx11" : ["gfx1030"],
+      "dx12" : ["gfx904"]
+    }
+  },
+  "decompile_directives" : {
+    "rga" : []
+  }
 }

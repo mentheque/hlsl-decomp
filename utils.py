@@ -58,3 +58,8 @@ def empty_dict_if_absent(dictionary, key):
   if key not in dictionary:
     dictionary[key] = {}
   return dictionary[key]
+
+class Decompilators(Enum):
+  RGA = 'rga'
+  ISA = 'isa'
+  Ocloc = 'ocloc'

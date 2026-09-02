@@ -200,7 +200,8 @@ def _calculate_file_stats(config : Config, repo : Repository, file_json):
     'platforms': _test_platforms(filename, normalised_contents),
     'shader_type': _test_shader_types(filename, normalised_contents),
     'is_shader': _is_target_extention(config, filename),
-    'case_sensitive_path' : file_json['path']
+    'case_sensitive_path' : file_json['path'],
+    'compiled' : False
   }
 
 
@@ -572,3 +573,26 @@ def file_has_stats_key(repo_stats, file_key):
 
 def file_has_stats(repo_stats, file_json):
   return file_has_stats_key(repo_stats, _file_key(file_json))
+
+from compile import load_compile_meta, has_preprocessed_file
+from utils import _shader_types, _shader_types_ext
+def mark_compiled(config: Config, walked):
+  config.log.licenses.primary("Marking compiled files")
+  meta = load_compile_meta(config)
+  for repo, file_jsons in walked:
+    counter = 0
+    repo_stats = load_repo_stats(config, repo)
+    repo_meta = meta[repo.full_name]
+    for file_json, _ in file_jsons:
+      file_stat = file_stats(repo_stats, file_json)
+      file_stat['compiled'] = False
+
+      if file_stat['hash'] in repo_meta:
+        file_meta = repo_meta[file_stat['hash']]
+        for shader_type in _shader_types_ext:
+          if shader_type in file_meta and len(file_meta[shader_type]['successes']) > 0:
+            file_stat['compiled'] = True
+            counter+=1
+            break
+    config.log.licenses.secondary(f"{counter} files with >=1 compilations in {repo.full_name}")
+    _save_repo_stats(config, repo, repo_stats)

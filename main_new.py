@@ -1,3 +1,4 @@
+import analyse_file
 import compile
 import export
 import repository_lists
@@ -178,7 +179,11 @@ from compile import preprocess
 
 #export.export_base(config, filtered, rlist_variant = rlist_variant, name ="all_licenses_conclusive")
 
-compile.compile(config, all_good_licenses)
+#compile.compile(config, all_good_licenses)
 
-stats.stats(config, all_good_licenses)
+#analyse_file.mark_compiled(config, all_good_licenses)
+
+#stats.compilation_stats(config, all_good_licenses)
+from utils import Decompilators
+compile.decompile(config, all_good_licenses, [Decompilators.RGA])
 

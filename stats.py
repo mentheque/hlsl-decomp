@@ -64,8 +64,14 @@ class TypedStats:
 
 from compile import load_compile_meta, has_preprocessed_file
 from utils import join_path
-def stats(config : Config, walked):
-  uncompiled_pixel = []
+def compilation_stats(config : Config, walked, list_uncompiled_files = False):
+  uncompiled = {
+    shader_type : []
+    for shader_type in _shader_types
+  }
+
+  total_dxc_non_lib = 0
+  total_compiled_to_spirv = 0
 
   total_out = TypedStats()
   repo_outs = []
@@ -91,9 +97,14 @@ def stats(config : Config, walked):
         for shader_type in _shader_types_ext:
           if shader_type in file_meta and len(file_meta[shader_type]['successes']) > 0:
             compiled_types[shader_type] = True
-          elif shader_type == 'pixel' and file_stat['shader_type']['pixel'] > 0 \
-            and (len(uncompiled_pixel) == 0 or uncompiled_pixel[-1][1] != file_stat['case_sensitive_path']):
-            uncompiled_pixel.append((repo.full_name, file_stat['case_sensitive_path']))
+            for entry_point, data in file_meta[shader_type]['successes'].items():
+              if len(data) == 4 and data[3] is not None:
+                total_dxc_non_lib += 1
+                if data[3][0]:
+                  total_compiled_to_spirv += 1
+
+          elif shader_type in _shader_types and file_stat['shader_type'][shader_type] > 0:
+            uncompiled[shader_type].append((repo.full_name, file_stat['case_sensitive_path']))
         repo_out.add_file(preprocessed_by,
                           file_stat['shader_type'],
                           compiled_types)
@@ -107,6 +118,7 @@ def stats(config : Config, walked):
   )
 
   print(f"Compiled rate : {total_out._base.compiled_rate()} out of {total_out._base._is_shader} files")
+  print(f"For eligible successfully compiled files spirv success rate: {total_compiled_to_spirv/total_dxc_non_lib}")
   for shader_type in _shader_types:
     print(f"{shader_type} : {total_out._typed[shader_type].compiled_rate()}"
           f" out of {total_out._typed[shader_type]._is_shader} files. "
@@ -128,6 +140,9 @@ def stats(config : Config, walked):
         [repo.full_name, repo_out._base._compiled, repo_out._base._is_shader, repo_out._base.compiled_rate()])
 
   print(f"Out of that, {under_5p} of uncompiled files are in repos with rate under 5%")
-  print("---- Uncompiled pixel shaders ----")
-  for repo_name, file_path in uncompiled_pixel:
-    print(f"{repo_name} {file_path}")
+
+  if list_uncompiled_files:
+    for shader_type in _shader_types:
+      print(f"---- Uncompiled {shader_type} shaders ----")
+      for repo_name, file_path in uncompiled[shader_type]:
+        print(f"{repo_name} {file_path}")
