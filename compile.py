@@ -1,3 +1,5 @@
+import re
+
 from config import Config
 from enum import Enum
 
@@ -248,7 +250,10 @@ _comptarget_full_list = {
 def _compiled_file_path(config : Config, repo_stats, file_json, comptarged, entry_point = None, spirv = False):
   return join_path(config.compiled_dir,
             file_stats(repo_stats, file_json)['hash'] +
-            f"_{comptarged}_{'' if entry_point is None else entry_point}{'_spirv' if spirv else ''}")
+            f"_{comptarged}_{'' if entry_point is None else entry_point}{'_spirv.spv' if spirv else ''}")
+
+def _has_compiled_file(config : Config, repo_stats, file_json, comptarged, entry_point = None, spirv = False):
+  return os.path.isfile(_compiled_file_path(config, repo_stats, file_json, comptarged, entry_point, spirv))
 
 def _compile_meta_path(config : Config):
   return join_path(config.compiled_dir, 'meta.json')
@@ -372,7 +377,6 @@ def compile(config : Config, walked, skip_successful = False):
 
 
 
-
 # TODO: fix copypaste
 def load_compile_meta(config : Config):
   try:
@@ -406,9 +410,11 @@ def _save_decompile_meta(config : Config, meta):
   with open(path, "w") as f:
     json.dump(meta, f)
 
+def _major_shader_model(comptarget: str) -> int:
+  return int(comptarget.split('_')[1])
 def _directx_version(comptarget: str) -> int:
   split = comptarget.split('_')
-  major = int(split[1])
+  major = _major_shader_model(comptarget)
   minor = split[2]
   if major <= 3:
     return 9
@@ -423,41 +429,36 @@ def _directx_version(comptarget: str) -> int:
     return 12
 
 
-from utils import _shader_types_ext, Decompilators
+from utils import _shader_types_ext, Decompilers
+_decompilers_to_platform = {
+  Decompilers.RGA : 'amd',
+  Decompilers.ISA : 'intel',
+  Decompilers.Ocloc : 'intel'
+}
+
 def decompile(config: Config, walked, decompilators = None):
   config.log.compile.primary("Starting decompilation")
   if decompilators is None:
-    decompilators = [Decompilators(decomp_name) for decomp_name in config.isa_devices.keys()]
+    decompilators = [Decompilers(decomp_name) for decomp_name in config.isa_devices.keys()]
   else:
     for decomp in decompilators:
-      #TODO: fix copypastte
-      if decomp.value not in config.isa_devices:
-        config.log.compile.primary(f"Target devices not provided for {decomp.value}. Aborting")
-        return
       if decomp.value not in config.decompilator_paths:
         config.log.compile.primary(f"Executable path not provided for {decomp.value}. Aborting")
         return
-  def map_dx_versions(dxv : int):
-    if dxv <= 11:
-      return 11
-    return 12
 
-  def get_decompile_additionals(decompilator : Decompilators):
+
+  def get_decompile_additionals(decompilator : Decompilers, mode = None):
+    if mode:
+      return config.decompile_directives.get(decompilator.value, {}).get(mode, [])
     return config.decompile_directives.get(decompilator.value, [])
 
-  def decompiled_files_prefix(file_stat, comptarget, entry_point, decompiler : Decompilators):
-    producer = 'amd' if decompiler == Decompilators.RGA else 'intel'
-    return join_path(config.decompiled_dir,
-                     f"{producer}/{file_stat['hash']}_{comptarget}_{entry_point if entry_point is not None else _}_")
-  command_generators = {
-    Decompilators.RGA: (lambda dx_version, comptarget, entry_point, devices, additionals, input_path :
-                        ['-s', f'dx{dx_version}',
-                         f"--{comptarget.split('_')[0]}-blob", input_path,
-                         '--all-model', comptarget.replace('x', '0')[3:],
-                         f"--{comptarget.split('_')[0]}-entry", entry_point,
-                         '--asic', ','.join(devices)]
-                        + additionals + ['--isa'])
-  }
+  def parse_successes_rga(output : str):
+    successes = []
+    for line in output.split('\n'):
+      match = re.match(r'Building for (\w+)\.\.\. succeeded\.', line)
+      if match:
+        successes.append(match.group(1))
+    return successes
 
   out_meta = load_decompile_meta(config)
   compiled_meta = load_compile_meta(config)
@@ -469,31 +470,114 @@ def decompile(config: Config, walked, decompilators = None):
         file_stat = file_stats(repo_stats, file_json)
         if file_stat['hash'] in compiled_meta_repo:
           file_comp_meta = compiled_meta_repo[file_stat['hash']]
-          for shader_type in _shader_types_ext:
+
+          # Not trying lib_x_x, because no way to properly decompile
+          for shader_type in _shader_types:
             if shader_type in file_comp_meta:
+              file_out_meta = empty_dict_if_absent(out_meta, file_stat['hash'])
+              st_out_meta = empty_dict_if_absent(file_out_meta, shader_type)
+
               for entry_point, info in file_comp_meta[shader_type]['successes'].items():
+                ep_out_meta = empty_dict_if_absent(st_out_meta, entry_point)
+                out_meta_attempts = ep_out_meta.setdefault('attempts', [])
+                out_meta_successes_ep = empty_dict_if_absent(ep_out_meta, 'successes')
+
                 comptarget, compiler_name, _, spirv_info = info
-                dx_version = map_dx_versions(_directx_version(comptarget))
+                dx_version = _directx_version(comptarget)
+                if dx_version <= 9:
+                  out_meta_attempts.append(("", comptarget, [], "Precheck: Unsupported shader model."))
+                  continue # Shader models 3.0 and below require second or third tools for each platform,
+                  # And don't see much value in them, so didn't add.
+
                 for decomp in decompilators:
-                  if decomp == Decompilators.RGA:
-                    decomp_name = decomp.value
-                    decomp_result = subprocess.run(
-                      [config.decompilator_paths[decomp_name]] +
-                      command_generators[decomp](dx_version,
-                                                 comptarget,
-                                                 entry_point,
-                                                 config.isa_devices[decomp_name][f'dx{dx_version}'],
-                                                 get_decompile_additionals(decomp),
-                                                 _compiled_file_path(config, repo_stats, file_json, comptarget,
-                                                                     entry_point, spirv=False)) +
-                      [decompiled_files_prefix(file_stat, comptarget, entry_point, decomp)],
-                      capture_output = True, text = True, timeout = 1000
-                    )
-                    if decomp_result.returncode == 0:
-                      print("SUCC")
+                  platform = _decompilers_to_platform[decomp]
+                  out_meta_successes = empty_dict_if_absent(out_meta_successes_ep, platform)
+                  decomp_name = decomp.value
+                  config.log.compile.secondary(f"Decompiling {file_stat['case_sensitive_path']}"
+                                               f" {entry_point} {comptarget} with {decomp_name}")
+
+
+                  command = []
+                  additionals = []
+                  output_dir = \
+                    join_path(config.decompiled_dir, file_stat['hash']) / platform / f"{comptarget}_{entry_point}"
+
+                  spirv = False
+                  if decomp == Decompilers.RGA:
+                    source = 'dx11' if dx_version <= 11 else 'vk-spv-offline'
+
+                    command = ['-s', source]
+                    devices = config.isa_devices.get(decomp_name, {}).get(source, [])
+                    if len(devices) > 0:
+                      command += ['-c', ','.join(devices)]
+
+                    command += ['--isa', str(output_dir) + '/']
+
+                    if source == 'dx11':
+                      command += ['--dxbc']
                     else:
-                      print(decomp_result.stderr)
+                      mapping = [('ps', 'frag'), ('cs', 'comp'), ('vs', 'vert')]
+                      command += [f'--{next((mapped for key, mapped in mapping if comptarget.startswith(key)), None)}']
+                      spirv = True
 
+                    additionals = get_decompile_additionals(decomp, source)
+                  elif decomp == Decompilers.ISA:
+                    if _major_shader_model(comptarget) >= 6:
+                      config.log.compile.secondary("Skipping, shader model higher than 5.1")
+                      continue # IntelShaderAnalyzer works up to 5.1
 
+                    api = 'dx11' if dx_version <= 11 else 'dx12'
+                    command = ['--api', api, '-s', 'dxbc']
 
+                    devices = config.isa_devices.get(decomp_name, {}).get(api, [])
+                    if len(devices) > 0:
+                      for device in devices:
+                        command += ['-c', device]
+
+                    command += ['--isa', str(output_dir) + '/']
+                    spirv = False
+
+                  if spirv and (spirv_info is None or not spirv_info[0]):
+                    config.log.compile.secondary("Failed: missing required spir-v compiled file")
+                    out_meta_attempts.append((decomp_name, comptarget,
+                                              [], "Precheck: missing required spir-v compiled file"))
+                    continue
+                  command += [_compiled_file_path(config, repo_stats, file_json, comptarget,
+                                                  entry_point, spirv=spirv)]
+
+                  output_dir.mkdir(parents=True, exist_ok=True)
+                  decomp_result = subprocess.run(
+                    [config.decompilator_paths[decomp_name]] +
+                    additionals +
+                    command,
+                    capture_output = True, text = True, timeout = 1000
+                  )
+
+                  if decomp_result.returncode == 1:
+                    config.log.compile.secondary(f"Process failed ({decomp_result.returncode}): "
+                                                 f"{decomp_result.stdout} stderr: {decomp_result.stderr}")
+                    out_meta_attempts.append((decomp_name,
+                                              comptarget, [], f"Process failed:\n stdout: {decomp_result.stdout} \n"
+                                                             f" stderr: {decomp_result.stderr}"))
+                    continue
+
+                  decomp_successes = []
+
+                  if decomp == Decompilers.RGA:
+                    decomp_successes = parse_successes_rga(decomp_result.stdout)
+                  elif decomp == Decompilers.ISA:
+                    decomp_successes = [f.stem for f in output_dir.glob("*.asm")] # No output, so just guessing.
+                    # Obviously, can verify against previously present files/ update times to check what was
+                    # actually generated, but won't for now.
+
+                  if len(decomp_successes) == 0:
+                    config.log.compile.secondary(f"! Zero successful decompilaions.")
+                    config.log.compile.secondary(decomp_result.stdout)
+                  else:
+                    config.log.compile.secondary(f"Successfully decompiled for:")
+                    for succ in decomp_successes:
+                      out_meta_successes[succ] = (comptarget, additionals)
+                      config.log.compile.secondary(f" {succ}")
+                  out_meta_attempts.append((decomp_name, comptarget, [], decomp_result.stdout))
+      _save_decompile_meta(config, out_meta)
 

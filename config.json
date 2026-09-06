@@ -140,15 +140,22 @@
   ],
   "decompiled_dir" : "C:/Users/menth/Documents/decompiled",
   "decompilator_paths" : {
-    "rga" : "C:/Users/menth/Downloads/RadeonDeveloperToolSuite-2026-05-28-1806/rga"
+    "rga" : "C:/Users/menth/Downloads/RadeonDeveloperToolSuite-2026-05-28-1806/rga",
+    "isa" : "C:/Users/menth/Downloads/IntelShaderAnalyzer_v1/IntelShaderAnalyzer/IntelShaderAnalyzer"
   },
   "isa_devices" : {
     "rga" : {
-      "dx11" : ["gfx1030"],
-      "dx12" : ["gfx904"]
+      "dx11" : [],
+      "vk-spv-offline" : []
+    },
+    "isa" : {
+      "dx11" : [],
+      "dx12" : []
     }
   },
   "decompile_directives" : {
-    "rga" : []
+    "rga" : {
+      "dx11" : ["-v"]
+    }
   }
 }

@@ -225,7 +225,7 @@ def _specific_values_verifier(permitted_values):
 _str_verifier = _type_verifier(str)
 
 
-from utils import Decompilators
+from utils import Decompilers
 _verifyers = {
   'str' : _str_verifier,
   'int' : _type_verifier(int),
@@ -288,31 +288,40 @@ _verifyers = {
   'decomp_directives_all' : _schema_verifier(
     {},
     {
-      decompilator.value: 'str_list'
-      for decompilator in Decompilators
+      Decompilers.RGA.value : 'rga_sources',
+      Decompilers.ISA.value : 'IntelShaderAnalyzer_sources'
     }
   ),
   'str_list_nonempty': _list_verifier('str', non_empty=True),
-  'directx_dependent_devices' : _schema_verifier(
+  'rga_sources' : _schema_verifier(
     {
-      'dx11' : 'str_list_nonempty',
-      'dx12' : 'str_list_nonempty'
     },
-    {}
+    {
+      'dx11' : 'str_list',
+      'vk-spv-offline' : 'str_list'
+    }
+  ),
+  'IntelShaderAnalyzer_sources': _schema_verifier(
+    {
+    },
+    {
+      'dx11' : 'str_list',
+      'dx12' : 'str_list'
+    }
   ),
   #TODO : Fix copypaste
   'isa_devices': _schema_verifier(
     {},
     {
-      decompilator.value: 'directx_dependent_devices'
-      for decompilator in Decompilators
+      Decompilers.RGA.value : 'rga_sources',
+      Decompilers.ISA.value : 'IntelShaderAnalyzer_sources',
     }
   ),
   'decompilator_paths' : _schema_verifier(
     {},
     {
       decompilator.value: 'str'
-      for decompilator in Decompilators
+      for decompilator in Decompilers
     }
   )
 }

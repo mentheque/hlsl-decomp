@@ -62,13 +62,16 @@ class TypedStats:
     for shader_type in _shader_types_ext:
       self._typed[shader_type].merge(other._typed[shader_type])
 
-from compile import load_compile_meta, has_preprocessed_file
+from compile import load_compile_meta, has_preprocessed_file, _directx_version
 from utils import join_path
+from collections import defaultdict
 def compilation_stats(config : Config, walked, list_uncompiled_files = False):
   uncompiled = {
     shader_type : []
     for shader_type in _shader_types
   }
+
+  dx_versions = defaultdict(int)
 
   total_dxc_non_lib = 0
   total_compiled_to_spirv = 0
@@ -98,6 +101,8 @@ def compilation_stats(config : Config, walked, list_uncompiled_files = False):
           if shader_type in file_meta and len(file_meta[shader_type]['successes']) > 0:
             compiled_types[shader_type] = True
             for entry_point, data in file_meta[shader_type]['successes'].items():
+              dx_versions[_directx_version(data[0])] += 1
+
               if len(data) == 4 and data[3] is not None:
                 total_dxc_non_lib += 1
                 if data[3][0]:
@@ -123,6 +128,11 @@ def compilation_stats(config : Config, walked, list_uncompiled_files = False):
     print(f"{shader_type} : {total_out._typed[shader_type].compiled_rate()}"
           f" out of {total_out._typed[shader_type]._is_shader} files. "
           f"{total_out._typed[shader_type].compiled_over_preprocessed_rate()} over preprocessed.")
+  print("For successful compilations, dx versions are: ")
+  for dxv, counter in dx_versions.items():
+    print(f"{dxv} : {counter}")
+
+
   print("--------------- Repo stats -------------")
   under_5p = 0
   for repo, repo_out in sorted_list:
