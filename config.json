@@ -141,7 +141,8 @@
   "decompiled_dir" : "C:/Users/menth/Documents/decompiled",
   "decompilator_paths" : {
     "rga" : "C:/Users/menth/Downloads/RadeonDeveloperToolSuite-2026-05-28-1806/rga",
-    "isa" : "C:/Users/menth/Downloads/IntelShaderAnalyzer_v1/IntelShaderAnalyzer/IntelShaderAnalyzer"
+    "isa" : "C:/Users/menth/Downloads/IntelShaderAnalyzer_v1/IntelShaderAnalyzer/IntelShaderAnalyzer",
+    "ocloc" : "C:/Program Files (x86)/Intel/oneAPI/2026.1/bin/ocloc.exe"
   },
   "isa_devices" : {
     "rga" : {
@@ -151,7 +152,8 @@
     "isa" : {
       "dx11" : [],
       "dx12" : []
-    }
+    },
+    "ocloc" : []
   },
   "decompile_directives" : {
     "rga" : {

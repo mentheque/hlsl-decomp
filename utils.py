@@ -60,4 +60,6 @@ def empty_dict_if_absent(dictionary : dict, key):
 class Decompilers(Enum):
   RGA = 'rga'
   ISA = 'isa'
-  Ocloc = 'ocloc'
+
+def major_shader_model(comptarget: str) -> int:
+  return int(comptarget.split('_')[1])

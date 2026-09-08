@@ -156,3 +156,76 @@ def compilation_stats(config : Config, walked, list_uncompiled_files = False):
       print(f"---- Uncompiled {shader_type} shaders ----")
       for repo_name, file_path in uncompiled[shader_type]:
         print(f"{repo_name} {file_path}")
+
+from compile import load_decompile_meta, _decompilers_to_platform
+from utils import empty_dict_if_absent, Decompilers
+def decompilation_stats(config : Config, walked):
+  platforms = set(_decompilers_to_platform.values())
+
+  meta = load_decompile_meta(config)
+  compiled_meta = load_compile_meta(config)
+
+  successful_sources_by_platform = {}
+  total_produced_by_platform = {}
+  for platform in platforms:
+    successful_sources_by_platform[platform] = 0
+    total_produced_by_platform[platform] = 0
+
+  sources_by_shader_model = {}
+
+  for repo, file_jsons in walked:
+    if repo.full_name in compiled_meta:
+      compiled_meta_repo = compiled_meta[repo.full_name]
+      repo_stats = load_repo_stats(config, repo)
+      for file_json, _ in file_jsons:
+        file_stat = file_stats(repo_stats, file_json)
+        if file_stat['hash'] in compiled_meta_repo:
+          file_comp_meta = compiled_meta_repo[file_stat['hash']]
+
+          # Not trying lib_x_x, because no way to properly decompile
+          for shader_type in _shader_types:
+            if shader_type in file_comp_meta:
+              file_out_meta = empty_dict_if_absent(meta, file_stat['hash'])
+              st_out_meta = empty_dict_if_absent(file_out_meta, shader_type)
+
+              for entry_point, info in file_comp_meta[shader_type]['successes'].items():
+                ep_out_meta = empty_dict_if_absent(st_out_meta, entry_point)
+                out_meta_successes_ep = empty_dict_if_absent(ep_out_meta, 'successes')
+
+                comptarget, compiler_name, _, spirv_info = info
+                if comptarget.startswith("lib"):
+                  continue
+                sources_by_shader_model.setdefault(comptarget[3:], 0)
+                sources_by_shader_model[comptarget[3:]] += 1
+
+                dx_version = _directx_version(comptarget)
+                if dx_version <= 9:
+                  continue # Shader models 3.0 and below require second or third tools for each platform,
+                  # And don't see much value in them, so didn't add.
+
+                for platform in platforms:
+                  out_meta_successes = empty_dict_if_absent(out_meta_successes_ep, platform)
+                  if len(out_meta_successes) > 0:
+                    successful_sources_by_platform[platform] += 1
+                    total_produced_by_platform[platform] += len(out_meta_successes)
+
+  print(f"Total non-library compiled: {sum(sources_by_shader_model.values())}")
+  print(f"From that, by shader model:")
+  amd_legible = 0
+  intel_legible = 0
+  for shmodel, count in sorted(sources_by_shader_model.items()):
+    print(f"{shmodel}: {count}")
+    major = int(shmodel[0])
+    if major <= 3 or shmodel == "5_1":
+      continue
+    elif major >= 6:
+      amd_legible += count
+    else:
+      amd_legible += count
+      intel_legible += count
+  print(f"Therefore, {amd_legible} files legible for amd decompilation, {intel_legible} for intel")
+  print(f"Success rate: amd - {successful_sources_by_platform['amd']/amd_legible}, "
+        f"intel - {successful_sources_by_platform['intel']/intel_legible}")
+  print(f"Total isa produced:")
+  for platform in platforms:
+    print(f"{platform} - {total_produced_by_platform[platform]}")

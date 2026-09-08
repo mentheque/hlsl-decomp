@@ -170,48 +170,8 @@ for repo, file_jsons in all_good_licenses:
       not in [LicenseGroup.Permissive, LicenseGroup.GPL, LicenseGroup.NoIncludes]:
       print("!! WTF")
 
-
-from compile import preprocess
-
-#preprocess(config, all_good_licenses, only_missing=True)
-
-#calculate_vanilla_compilation_parameters(config, all_good_licenses, specific_shader_types=['compute', 'vertex'])
-                                        #, specific_shader_types=['compute'],
-                                        # excluded_repos=['clshortfuse/renodx', 'NotVoosh/renodx-unity'])
-
-#export.export_base(config, filtered, rlist_variant = rlist_variant, name ="all_licenses_conclusive")
-
-#compile.compile(config, all_good_licenses)
-
-#analyse_file.mark_compiled(config, all_good_licenses)
-
-#stats.compilation_stats(config, all_good_licenses)
-
-
-# res = subprocess.run(
-#   [config.decompilator_paths['rga'],
-#    '-s', 'dx11',
-# '--asic', 'gfx1030',
-#    '--isa', str(save_path),
-#    '--dxbc', "C:/Users/menth/Documents/compiled/68e405dcce5ade20d1a8eb45b665a0ff60e8e5945805be16793e8305f0e9de56_ps_4_0_main"
-#    ]
-# , capture_output=True, text=True, check=True)
-
-# save_path = join_path(config.decompiled_dir, 'amd/6767')
-# save_path.parent.mkdir(parents=True, exist_ok=True)
-# res_6 = subprocess.run(
-#   [config.decompilator_paths['rga'],
-#    '-s', f'vk-spv-offline',
-#     #'-c', 'gfx1100',
-#    '--isa', str(save_path) + '/',
-# '--comp', "C:/Users/menth/Documents/5df75fe1ea9c2ae5f3b6738bde0ac4ffd3ce070405bc31bf65c451e740014373_cs_6_3_CopyToFinal_spirv.spv"
-#    ]
-# , capture_output=True, text=True, check=True)
-#
-# print(res_6.returncode)
-# print(res_6.stdout)
-# print(res_6.stderr)
-
 from utils import Decompilers
-compile.decompile(config, all_good_licenses, [Decompilers.ISA])
+#compile.decompile(config, all_good_licenses, [Decompilers.RGA, Decompilers.ISA], skip_successful=True)
+#stats.decompilation_stats(config, all_good_licenses)
+compile.remove_line_directives(config, all_good_licenses)
 

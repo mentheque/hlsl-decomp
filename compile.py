@@ -410,11 +410,10 @@ def _save_decompile_meta(config : Config, meta):
   with open(path, "w") as f:
     json.dump(meta, f)
 
-def _major_shader_model(comptarget: str) -> int:
-  return int(comptarget.split('_')[1])
+from utils import major_shader_model
 def _directx_version(comptarget: str) -> int:
   split = comptarget.split('_')
-  major = _major_shader_model(comptarget)
+  major = major_shader_model(comptarget)
   minor = split[2]
   if major <= 3:
     return 9
@@ -432,12 +431,13 @@ def _directx_version(comptarget: str) -> int:
 from utils import _shader_types_ext, Decompilers
 _decompilers_to_platform = {
   Decompilers.RGA : 'amd',
-  Decompilers.ISA : 'intel',
-  Decompilers.Ocloc : 'intel'
+  Decompilers.ISA : 'intel'
 }
 
-def decompile(config: Config, walked, decompilators = None):
+def decompile(config: Config, walked, decompilators = None, skip_successful = False):
   config.log.compile.primary("Starting decompilation")
+  save_every_x = 100
+
   if decompilators is None:
     decompilators = [Decompilers(decomp_name) for decomp_name in config.isa_devices.keys()]
   else:
@@ -462,6 +462,8 @@ def decompile(config: Config, walked, decompilators = None):
 
   out_meta = load_decompile_meta(config)
   compiled_meta = load_compile_meta(config)
+
+  files_decompiled = 0
   for repo, file_jsons in walked:
     if repo.full_name in compiled_meta:
       compiled_meta_repo = compiled_meta[repo.full_name]
@@ -493,6 +495,12 @@ def decompile(config: Config, walked, decompilators = None):
                   platform = _decompilers_to_platform[decomp]
                   out_meta_successes = empty_dict_if_absent(out_meta_successes_ep, platform)
                   decomp_name = decomp.value
+
+                  if skip_successful and len(out_meta_successes) > 0:
+                    config.log.compile.secondary(f"Skip successful on, skipping {decomp_name} for "
+                                                 f"{file_stat['case_sensitive_path']} {entry_point} {comptarget}")
+                    continue
+
                   config.log.compile.secondary(f"Decompiling {file_stat['case_sensitive_path']}"
                                                f" {entry_point} {comptarget} with {decomp_name}")
 
@@ -579,5 +587,34 @@ def decompile(config: Config, walked, decompilators = None):
                       out_meta_successes[succ] = (comptarget, additionals)
                       config.log.compile.secondary(f" {succ}")
                   out_meta_attempts.append((decomp_name, comptarget, [], decomp_result.stdout))
+
+                  files_decompiled += 1
+                  if files_decompiled % save_every_x == 0:
+                    config.log.compile.primary(f"Saving, attempted {files_decompiled}")
+                    _save_decompile_meta(config, out_meta)
+
       _save_decompile_meta(config, out_meta)
+
+import tempfile
+import shutil
+def remove_line_directives(config : Config, walked):
+  config.log.compile.primary(f"Starting line directives removal")
+
+  for repo, file_jsons in walked:
+    config.log.compile.secondary(f"Processing files in {repo.full_name}")
+    repo_stats = load_repo_stats(config, repo)
+
+    for compiler in _compilers.values():
+      add_directives = _additional_directives(config, repo, CompStep.Preprocessing, compiler.type)
+
+      for file_json, _ in file_jsons:
+        path = _preprocessed_file_path(config, repo_stats, file_json, compiler.type)
+        try:
+          with open(path, 'r') as f, tempfile.NamedTemporaryFile('w', delete=False) as tmp:
+            for line in f:
+              if not line.startswith('#line'):
+                tmp.write(line)
+          shutil.move(tmp.name, path)
+        except Exception as e:
+          config.log.compile.secondary(f"Failed on {file_json['path']} {compiler.name} : {e}")
 
