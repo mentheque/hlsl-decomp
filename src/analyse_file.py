@@ -1,7 +1,7 @@
 import json
 
-from config import Config
-from utils import Repository, file_stats, file_stats_key, _file_key, _make_file_key
+from src.config import Config
+from src.utils import Repository, file_stats, file_stats_key, _file_key, _make_file_key
 
 import hashlib
 
@@ -115,7 +115,7 @@ def _test_categorical_patterns(categories, filename_patterns, contents_patterns,
 def _test_platforms(filename : str, file_contents: str):
   return _test_categorical_patterns(_platforms, _pfilename_patterns, _pcontents_patterns, filename, file_contents)
 
-from utils import _shader_types
+from src.utils import _shader_types
 _stfilename_patterns = _compile_dict_patterns({
   "pixel": [(r'\.ps', 0.9),
             (r'\.pixel', 0.9),
@@ -184,8 +184,8 @@ def _test_shader_types(filename : str, file_contents: str):
 def _is_target_extention(config: Config, filename):
   return any(pattern.match(filename) for pattern in config.target_extension_patterns)
 
-from license_scanning import file_path
-from utils import file_name
+from src.license_scanning import file_path
+from src.utils import file_name
 # hash, size, line count
 #
 # TODO: Add license groups in here too somehow for uniformity
@@ -207,7 +207,6 @@ def _calculate_file_stats(config : Config, repo : Repository, file_json):
 
 import os
 from pathlib import Path
-from utils import extention_case_variations
 
 # Creates flat lists of all includes for all the files in the current repository,
 # Containing all (possibly) included files from the same repository
@@ -271,7 +270,7 @@ def _includes_list(config : Config, repo : Repository, file_jsons):
 
 
 
-from utils import join_path
+from src.utils import join_path
 # TODO: fix copypaste from scancode_cache_file
 def _repo_shader_stats_file(config : Config, repo : Repository):
   # Now, it is possible to fool this pattern if there is _ in the names of user/repo, but
@@ -354,8 +353,8 @@ def update_basic_stats(config : Config, repo : Repository, file_jsons, recalcula
   if changed:
     _save_repo_stats(config, repo, repo_stats)
 
-from license_scanning import _sort_file_conclusive, _filter_file_conclusive
-from config import LicenseGroup
+from src.license_scanning import _sort_file_conclusive, _filter_file_conclusive
+from src.config import LicenseGroup
 def calculate_license_stats(config : Config, walked):
   config.log.licenses.primary("Saving file licenses")
   permissive, gpl, nonedet, other = \
@@ -393,7 +392,7 @@ def _compile_ep_patterns(patterns, flags = re.IGNORECASE | re.DOTALL):
 
   return ret
 
-from utils import CompilerTypes, flatten_uniquely
+from src.utils import CompilerTypes, flatten_uniquely
 _entry_point_patterns = _compile_ep_patterns({
   'pixel': flatten_uniquely([
     [
@@ -451,7 +450,7 @@ _comptarget_patterns = _compile_ep_patterns({
 from collections import defaultdict
 def calculate_vanilla_compilation_parameters(config : Config, walked, specific_shader_types = None,
                                              excluded_repos : list = None, included_repos : list = None):
-  from compile import load_preprocessed_file
+  from src.compile import load_preprocessed_file
   selected_shader_types = _shader_types if specific_shader_types is None else specific_shader_types
   def default_if_absent(dictionary, key, value):
     if key not in dictionary:
@@ -574,8 +573,8 @@ def file_has_stats_key(repo_stats, file_key):
 def file_has_stats(repo_stats, file_json):
   return file_has_stats_key(repo_stats, _file_key(file_json))
 
-from compile import load_compile_meta, has_preprocessed_file
-from utils import _shader_types, _shader_types_ext
+from src.compile import load_compile_meta, has_preprocessed_file
+from src.utils import _shader_types, _shader_types_ext
 def mark_compiled(config: Config, walked):
   config.log.licenses.primary("Marking compiled files")
   meta = load_compile_meta(config)

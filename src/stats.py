@@ -1,7 +1,7 @@
-from config import Config
+from src.config import Config
 
-from analyse_file import file_stats, load_repo_stats, file_has_stats
-from utils import CompilerTypes
+from src.analyse_file import file_stats, load_repo_stats, file_has_stats
+from src.utils import CompilerTypes
 
 class BaseStat:
   def __init__(self):
@@ -39,7 +39,7 @@ class BaseStat:
     return self._compiled / self._preprocessed_either
 
 
-from utils import _shader_types, _shader_types_ext
+from src.utils import _shader_types, _shader_types_ext
 class TypedStats:
   def __init__(self):
     self._base = BaseStat()
@@ -62,8 +62,8 @@ class TypedStats:
     for shader_type in _shader_types_ext:
       self._typed[shader_type].merge(other._typed[shader_type])
 
-from compile import load_compile_meta, has_preprocessed_file, _directx_version
-from utils import join_path
+from src.compile import load_compile_meta, has_preprocessed_file, _directx_version
+from src.utils import join_path
 from collections import defaultdict
 def compilation_stats(config : Config, walked, list_uncompiled_files = False):
   uncompiled = {
@@ -157,10 +157,10 @@ def compilation_stats(config : Config, walked, list_uncompiled_files = False):
       for repo_name, file_path in uncompiled[shader_type]:
         print(f"{repo_name} {file_path}")
 
-from compile import load_decompile_meta, _decompilers_to_platform
-from utils import empty_dict_if_absent, Decompilers
+from src.compile import load_decompile_meta, _decompilers_to_system
+from src.utils import empty_dict_if_absent, Decompilers
 def decompilation_stats(config : Config, walked):
-  platforms = set(_decompilers_to_platform.values())
+  platforms = set(_decompilers_to_system.values())
 
   meta = load_decompile_meta(config)
   compiled_meta = load_compile_meta(config)

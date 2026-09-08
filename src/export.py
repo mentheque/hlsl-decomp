@@ -1,11 +1,10 @@
-from config import Config, LicenseGroup
-from utils import Repository
+from src.config import Config, LicenseGroup
+from src.utils import Repository
 from collections import OrderedDict
 
 
-from license_scanning import _filter_file_conclusive, _sort_file_conclusive
-from analyse_file import load_repo_stats, _file_key, file_stats, file_has_stats
-from git_utils import repo_commit_sha
+from src.analyse_file import load_repo_stats, _file_key, file_stats, file_has_stats
+from src.git_utils import repo_commit_sha
 
 class BaseExportInputs:
   def __init__(self, config, file_stat, commit_sha, repo : Repository, license_jsons, repo_stats):
@@ -20,7 +19,7 @@ def _new_get_stat(key1, key2 = None, transform = (lambda x : x)):
   return (lambda be_inputs:
           transform(be_inputs.file_stat[key1] if key2 is None else be_inputs.file_stat[key1][key2]))
 
-from utils import reponameless_path
+from src.utils import reponameless_path
 
 def _get_link_inner(path, commit_sha, repo):
   return f"https://github.com/{repo.full_name}/blob/{commit_sha}/{reponameless_path(path)}"
@@ -54,7 +53,7 @@ _license_mapping = {
   LicenseGroup.NoIncludes : 'No includes'
 }
 
-from repository_lists import RepositoryLists
+from src.repository_lists import RepositoryLists
 _list_name_mapping = {
   RepositoryLists.Full: "Full",
   RepositoryLists.SelectedLicenses: "SelectedLicenses",
@@ -82,7 +81,7 @@ def _license_prefix(config : Config, file_stat, license_jsons):
 def _get_license_prefix(be_inputs):
   return _license_prefix(be_inputs.config, be_inputs.file_stat, be_inputs.license_jsons)
 
-from analyse_file import _platforms, _shader_types
+from src.analyse_file import _platforms, _shader_types
 # hash, repo_path, is_shader, link, author, repo_name, size, lines, platform, type, license, license_source_link,
 # includes, includes_hash, includes_worst_case_licenses.
 _csv_structure_base = OrderedDict([
@@ -114,22 +113,41 @@ _csv_structure_base = OrderedDict([
 import zipfile
 from io import StringIO
 import csv
-from license_scanning import file_path
+from src.license_scanning import file_path
 
-from utils import join_path
-def export_file_path(config : Config, rlist_variant: RepositoryLists, name):
+from src.utils import join_path
+def _export_file_path(config : Config, purpose : str, rlist_variant: RepositoryLists = None, name = None):
   def empty_if_none(value, transform = (lambda x : x)):
     return '' if value is None else transform(value)
 
   return join_path(config.exported_zip_dir,
-                   f'export_{empty_if_none(rlist_variant, _list_name_mapping.get)}_{empty_if_none(name)}.zip')
+                   f'export_{empty_if_none(rlist_variant, _list_name_mapping.get)}_{purpose}_{empty_if_none(name)}.zip')
 
-def export_base(config : Config, walked, rlist_variant: RepositoryLists = None, name = None):
-  config.log.export.primary("Starting export process for base task")
+def _write_export_zip(config : Config, csv_output : StringIO, files : list,  purpose : str,
+                      rlist_variant: RepositoryLists, name):
+  config.log.export.primary("Contents calculated, writing zip file")
+  try:
+    export_path = _export_file_path(config, purpose, rlist_variant, name)
+    export_path.parent.mkdir(exist_ok=True, parents=True)
+    with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+      zipf.writestr('stats.csv', csv_output.getvalue())
+      for file, new_name in files:
+        zipf.write(file, new_name)
+  except Exception as e:
+    config.log.export.primary(f"Failed to write zip file: {e}")
+    raise e
+
+def _initialise_export(csv_structure : OrderedDict):
   output = StringIO()
   writer = csv.writer(output)
-  writer.writerow(_csv_structure_base.keys())
+  writer.writerow(csv_structure.keys())
   files = []
+
+  return output, writer, files
+def export_base(config : Config, walked, rlist_variant: RepositoryLists = None, name = None):
+  config.log.export.primary("Starting export process for base task")
+  output, writer, files = _initialise_export(_csv_structure_base)
+
   for repo, file_jsons in walked:
     repo_stats = load_repo_stats(config, repo)
     commit_sha = repo_commit_sha(config, repo)
@@ -143,17 +161,7 @@ def export_base(config : Config, walked, rlist_variant: RepositoryLists = None, 
                       _license_prefix(config, file_stat, license_sources) + '/' + file_stat['hash']))
 
 
-  config.log.export.primary("Contents calculated, writing zip file")
-  try:
-    export_path = export_file_path(config, rlist_variant, name)
-    export_path.parent.mkdir(exist_ok=True, parents=True)
-    with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-      zipf.writestr('stats.csv', output.getvalue())
-      for file, new_name in files:
-        zipf.write(file, new_name)
-  except Exception as e:
-    config.log.export.primary(f"Failed to write zip file: {e}")
-    raise e
+  _write_export_zip(config, output, files, "base_export", rlist_variant, name)
 
 class IsaExportInputs:
   def __init__(self, config, file_stat, commit_sha, repo : Repository, license_jsons, repo_stats, successes,
@@ -178,7 +186,7 @@ def _new_get_succ_number(system : str):
     return len(isa_inputs.successes[system])
   return inner
 
-from utils import major_shader_model
+from src.utils import major_shader_model
 def _archive_source_path(file_stat, comptarget : str):
   return 'sources/' + file_stat['hash'] + '_' + ('fxc' if major_shader_model(comptarget) <= 5 else 'dxc')
 
@@ -200,7 +208,8 @@ _csv_structure_isa = OrderedDict([
   ('compilation_target', _new_get_comp_detail('compilation_target')),
   ('combined_license',
    lambda isa_inputs:
-   _license_mapping.get(max(isa_inputs.file_stat['worst_included_license'], isa_inputs.file_stat['license'])))] +
+   _license_mapping.get(max(isa_inputs.file_stat['worst_included_license'], isa_inputs.file_stat['license']
+                            , key=lambda m: m.value)))] +
   [item for sublist in [
     [
       (f'{system}_decompiled', _new_get_succ_number(system)),
@@ -210,34 +219,55 @@ _csv_structure_isa = OrderedDict([
   ('source_file', _get_archive_source_path),
   ('isa_dir', _get_archive_isa_dir)
 ])
-# def export_isa(config : Config, walked, rlist_variant: RepositoryLists = None, name = None):
-#   config.log.export.primary("Starting export process for base task")
-#   output = StringIO()
-#   writer = csv.writer(output)
-#   writer.writerow(_csv_structure_base.keys())
-#   files = []
-#   for repo, file_jsons in walked:
-#     repo_stats = load_repo_stats(config, repo)
-#     commit_sha = repo_commit_sha(config, repo)
-#     for file_json, license_sources in file_jsons:
-#       if file_has_stats(repo_stats, file_json):
-#         file_stat = file_stats(repo_stats, file_json)
-#
-#         writer.writerow([func(BaseExportInputs(config, file_stat, commit_sha, repo, license_sources, repo_stats))
-#                          for func in _csv_structure_base.values()])
-#
-#         files.append((file_path(config, repo, file_json),
-#                       _license_prefix(config, file_stat, license_sources) + '/' + file_stat['hash']))
-#
-#
-#   config.log.export.primary("Contents calculated, writing zip file")
-#   try:
-#     export_path = export_file_path(config, rlist_variant, name)
-#     export_path.parent.mkdir(exist_ok=True, parents=True)
-#     with zipfile.ZipFile(export_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-#       zipf.writestr('stats.csv', output.getvalue())
-#       for file, new_name in files:
-#         zipf.write(file, new_name)
-#   except Exception as e:
-#     config.log.export.primary(f"Failed to write zip file: {e}")
-#     raise e
+
+from src.compile import load_decompile_meta, _preprocessed_file_path, isa_path, _decompile_meta_path
+from src.utils import CompilerTypes
+def export_isa(config : Config, walked, rlist_variant: RepositoryLists = None, name = None):
+  config.log.export.primary("Starting export process for decompiled ISA")
+
+  meta = load_decompile_meta(config)
+  output, writer, files = _initialise_export(_csv_structure_isa)
+  for repo, file_jsons in walked:
+    repo_stats = load_repo_stats(config, repo)
+    commit_sha = repo_commit_sha(config, repo)
+    for file_json, license_sources in file_jsons:
+      if file_has_stats(repo_stats, file_json):
+        file_stat = file_stats(repo_stats, file_json)
+
+        if file_stat['hash'] in meta:
+          file_meta = meta[file_stat['hash']]
+          for shader_type, st_meta in file_meta.items():
+            for entry_point, ep_meta in st_meta.items():
+              succ_meta = ep_meta['successes']
+              if len(succ_meta) > 0:
+                comptarget = None
+                for system, successes in succ_meta.items():
+                  if len(successes) == 0:
+                    continue # Can happen.
+
+                  # A weird place to store it, as if it can differ, but whatever at this point, not changing
+                  if comptarget is None:
+                    comptarget = list(successes.values())[0][0]
+                  for arch_name, data in successes.items():
+                    files.append(
+                      (isa_path(config, file_stat, system, entry_point, comptarget, arch_name),
+                       _archive_isa_dir(file_stat, comptarget, entry_point) + f"{system}/{arch_name}")
+                    )
+
+                if comptarget is not None:
+                  writer.writerow(
+                    [func(IsaExportInputs(config, file_stat, commit_sha, repo, license_sources, repo_stats, succ_meta,
+                                          {
+                                            'shader_type': shader_type,
+                                            'entry_point': entry_point,
+                                            'compilation_target': comptarget
+                                          }))
+                     for func in _csv_structure_isa.values()])
+                  major = major_shader_model(comptarget)
+                  files.append((_preprocessed_file_path(config, repo_stats, file_json,
+                                                        CompilerTypes.DXC if major >= 6 else CompilerTypes.FXC),
+                                _archive_source_path(file_stat, comptarget)))
+
+  files.append((_decompile_meta_path(config), "meta.json"))
+
+  _write_export_zip(config, output, files, "isa_export", rlist_variant, name)

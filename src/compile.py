@@ -1,14 +1,14 @@
 import re
 
-from config import Config
+from src.config import Config
 from enum import Enum
 
-from analyse_file import load_repo_stats, file_stats
-from utils import _shader_types, empty_dict_if_absent
+from src.analyse_file import load_repo_stats, file_stats
+from src.utils import _shader_types, empty_dict_if_absent
 
 import subprocess
 
-from utils import CompilerTypes
+from src.utils import CompilerTypes
 class Compiler:
   def __init__(self, name : str, type : CompilerTypes, preprocessing_arr_gen, version_arr, compile_arr_gen):
     self.name = name
@@ -60,7 +60,7 @@ _compilers = {
                                compile_arr_gen=new_compile_arr_gen('-T', '-Fo', '-E'))
 }
 
-from license_scanning import file_path
+from src.license_scanning import file_path
 
 def _success(subprocess_result):
   return subprocess_result.returncode == 0
@@ -126,7 +126,7 @@ _comp_step_name = {
   CompStep.Compilation : 'compilation'
 }
 
-from utils import Repository
+from src.utils import Repository
 def _additional_directives(config : Config, repo : Repository, step : CompStep, compiler : CompilerTypes,
                            file_stat = None):
   def attempt_loading(step_name, item_name, compiler_name):
@@ -151,7 +151,7 @@ def _additional_directives(config : Config, repo : Repository, step : CompStep, 
 
 
 
-from utils import join_path
+from src.utils import join_path
 def _preprocessed_file_path(config : Config, repo_stats, file_json, compiler : CompilerTypes):
   return join_path(config.preprocessed_dir,
                    file_stats(repo_stats, file_json)['hash'] +
@@ -410,7 +410,7 @@ def _save_decompile_meta(config : Config, meta):
   with open(path, "w") as f:
     json.dump(meta, f)
 
-from utils import major_shader_model
+from src.utils import major_shader_model
 def _directx_version(comptarget: str) -> int:
   split = comptarget.split('_')
   major = major_shader_model(comptarget)
@@ -428,11 +428,30 @@ def _directx_version(comptarget: str) -> int:
     return 12
 
 
-from utils import _shader_types_ext, Decompilers
-_decompilers_to_platform = {
+from src.utils import _shader_types_ext, Decompilers
+_decompilers_to_system = {
   Decompilers.RGA : 'amd',
   Decompilers.ISA : 'intel'
 }
+
+
+def _map_shader_type_for_rga_vk_offline(comptarget : str):
+  mapping = [('ps', 'frag'), ('cs', 'comp'), ('vs', 'vert')]
+  return next((mapped for key, mapped in mapping if comptarget.startswith(key)), None)
+
+def isa_dir(config: Config, file_stat, system, entry_point, comptarget):
+  return join_path(config.decompiled_dir, file_stat['hash']) / system / f"{comptarget}_{entry_point}"
+
+def isa_path(config: Config, file_stat, system, entry_point, comptarget, arch_name):
+  suffix = ""
+  if system == 'amd':
+    if _directx_version(comptarget) >= 12:
+      suffix = f"_isa_{_map_shader_type_for_rga_vk_offline(comptarget)}"
+    suffix += ".amdisa"
+  else:
+    suffix = f".asm"
+  return isa_dir(config, file_stat, system, entry_point, comptarget) / (arch_name + suffix)
+
 
 def decompile(config: Config, walked, decompilators = None, skip_successful = False):
   config.log.compile.primary("Starting decompilation")
@@ -492,8 +511,8 @@ def decompile(config: Config, walked, decompilators = None, skip_successful = Fa
                   # And don't see much value in them, so didn't add.
 
                 for decomp in decompilators:
-                  platform = _decompilers_to_platform[decomp]
-                  out_meta_successes = empty_dict_if_absent(out_meta_successes_ep, platform)
+                  system = _decompilers_to_system[decomp]
+                  out_meta_successes = empty_dict_if_absent(out_meta_successes_ep, system)
                   decomp_name = decomp.value
 
                   if skip_successful and len(out_meta_successes) > 0:
@@ -507,8 +526,8 @@ def decompile(config: Config, walked, decompilators = None, skip_successful = Fa
 
                   command = []
                   additionals = []
-                  output_dir = \
-                    join_path(config.decompiled_dir, file_stat['hash']) / platform / f"{comptarget}_{entry_point}"
+                  output_dir = isa_dir(config, file_stat, system, entry_point, comptarget)
+
 
                   spirv = False
                   if decomp == Decompilers.RGA:
@@ -524,13 +543,12 @@ def decompile(config: Config, walked, decompilators = None, skip_successful = Fa
                     if source == 'dx11':
                       command += ['--dxbc']
                     else:
-                      mapping = [('ps', 'frag'), ('cs', 'comp'), ('vs', 'vert')]
-                      command += [f'--{next((mapped for key, mapped in mapping if comptarget.startswith(key)), None)}']
+                      command += [f'--{_map_shader_type_for_rga_vk_offline(comptarget)}']
                       spirv = True
 
                     additionals = get_decompile_additionals(decomp, source)
                   elif decomp == Decompilers.ISA:
-                    if _major_shader_model(comptarget) >= 6:
+                    if major_shader_model(comptarget) >= 6:
                       config.log.compile.secondary("Skipping, shader model higher than 5.1")
                       continue # IntelShaderAnalyzer works up to 5.1
 

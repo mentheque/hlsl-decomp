@@ -2,7 +2,7 @@ import re
 from enum import Enum
 import json
 
-from logs import Logger, NotLogger
+from src.logs import Logger, NotLogger
 
 class MultiModuleLogger:
   def __init__(self, default_logger = None, github_logger = None, git_logger = None, licenses_logger = None,
@@ -35,7 +35,7 @@ class LicenseType:
     self.unique_prefix = unique_prefix
     self.group = group
 
-from utils import CompilerTypes
+from src.utils import CompilerTypes
 
 class Config:
   _DEFAULT_VALUES = {
@@ -123,7 +123,7 @@ class Config:
     self.isa_devices = isa_devices
 
 
-from logs import EchoLogger, PrefixedLogger
+from src.logs import EchoLogger, PrefixedLogger
 def load_config(path ='config.json') -> Config:
   def errorExit(message: str):
     print("+ Error: " + message)
@@ -156,7 +156,7 @@ def load_config(path ='config.json') -> Config:
     language=get('language'),
     github_token=get('github_token'),
     target_file_extensions=get('target_file_extensions'),
-    log = MultiModuleLogger(PrefixedLogger("default", EchoLogger(filepath="logs/default_logs.txt"))), # For now
+    log = MultiModuleLogger(PrefixedLogger("default", EchoLogger(filepath="../logs/default_logs.txt"))), # For now
     additional_file_extensions = get_or_default('additional_file_extensions'),
     repository_list_dir = get_or_default('repository_list_dir'),
     git_directory = get_or_default('git_directory'),
@@ -225,7 +225,7 @@ def _specific_values_verifier(permitted_values):
 _str_verifier = _type_verifier(str)
 
 
-from utils import Decompilers
+from src.utils import Decompilers
 _verifyers = {
   'str' : _str_verifier,
   'int' : _type_verifier(int),

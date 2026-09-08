@@ -4,9 +4,8 @@ import json
 import tempfile
 import subprocess
 
-from config import Config
-from utils import Repository, join_path
-from git_utils import repo_dir
+from src.config import Config
+from src.utils import Repository, join_path
 
 def _run_scancode(config : Config, repo_dir : Path, save_to = None):
   if save_to is None:
@@ -144,7 +143,7 @@ def _filter_file_conclusive(walked, store_empty_repos = False):
       conclusive.append((repo, conclusive_repo))
   return conclusive
 
-from config import LicenseGroup
+from src.config import LicenseGroup
 
 def _sort_file_conclusive(config : Config, file_conclusive, store_empty_repos = False):
   permissive_prefixes = [license.unique_prefix for license in config.licenses
@@ -201,7 +200,7 @@ def flatten_removing_repos(list_w_repos):
   return [shader for _, repo_shaders in list_w_repos for shader in repo_shaders]
 
 
-from git_utils import repo_dir
+from src.git_utils import repo_dir
 def file_path(config : Config, repo : Repository, file_json):
   return repo_dir(config, repo) / Path(*Path(file_json["path"]).parts[1:])
 

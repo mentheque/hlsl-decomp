@@ -1,4 +1,4 @@
-from utils import compose
+from src.utils import compose
 from pathlib import Path
 
 class Logger:

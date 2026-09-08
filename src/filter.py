@@ -1,14 +1,14 @@
-from config import Config
-from utils import Repository
+from src.config import Config
+from src.utils import Repository
 
-from analyse_file import _file_key
+from src.analyse_file import _file_key
 def filter_has_stats(repo_stats, file_json):
   return _file_key(file_json) not in repo_stats
 
 def _filter_between(value, min_value, max_value):
   return (min_value is not None and value < min_value) or (max_value is not None and value > max_value)
 
-from analyse_file import file_stats, load_repo_stats
+from src.analyse_file import file_stats, load_repo_stats
 def _filter_stat_between(stats_name, min_value, max_value):
   return (lambda repo_stats, file_json:
           _filter_between(file_stats(repo_stats, file_json)[stats_name], min_value, max_value))

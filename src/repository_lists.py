@@ -4,9 +4,9 @@ from pathlib import Path
 import json
 from datetime import datetime
 from calendar import monthrange
-from utils import Repository
+from src.utils import Repository
 
-from config import Config
+from src.config import Config
 
 
 def _init_github(config : Config) -> Github:
@@ -111,7 +111,7 @@ def gh_full_repository_list(config : Config):
   )
 
 #TODO : fix logs
-from config import LicenseType
+from src.config import LicenseType
 def gh_selected_licenses(config : Config, licenses : [LicenseType] = None, file_path = None):
   if licenses is None:
     licenses = config.licenses
@@ -170,7 +170,7 @@ def load_selected_licenses_rlist(config : Config, file_path = None):
   return _load(_selected_licenses_rlist_path(config) if file_path is None else file_path)
 
 
-from utils import join_path
+from src.utils import join_path
 def _dump_file_path(config : Config, filename):
   return join_path(config.repository_list_dir, filename)
 

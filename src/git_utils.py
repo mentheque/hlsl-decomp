@@ -5,8 +5,8 @@ import stat
 import subprocess
 import re
 
-from config import Config
-from utils import Repository
+from src.config import Config
+from src.utils import Repository
 
 # TODO: check against actual patterns
 # Define patterns based on the Licensee gem's FILENAME_REGEXES
@@ -156,7 +156,7 @@ def clone_license_named_and_target_files(config : Config, repo : Repository):
   )
   _checkout(config, repo, repo_dir)
 
-from utils import join_path
+from src.utils import join_path
 
 def repo_dir(config : Config, repo : Repository):
   return join_path(config.git_directory, repo.full_name)
