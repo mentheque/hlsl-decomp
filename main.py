@@ -8,8 +8,17 @@ from src.repository_lists import RepositoryLists
 
 from src.config import load_config
 
+import argparse
+
+parser = argparse.ArgumentParser(description='HLSL files collection from github, sorting by licenses, decompiling')
+parser.add_argument('--config', help='Config file', default='config.json')
+parser.add_argument('--filter-size', help='Minimum file size (bytes)', default=0, type=int)
+parser.add_argument('--filter-lines', help='Minimum file linecount', default=0, type=int)
+
+args = parser.parse_args()
+
 try:
-  config = load_config()
+  config = load_config(args.config)
 except Exception as e:
   terminate("Failed to load config")
 
@@ -62,46 +71,53 @@ walked, _ = _walk_repos(config, rlist)
 from src.analyse_file import update_basic_stats, load_repo_stats
 from src.analyse_file import calculate_license_stats
 
-#recalc_stats = False
+if not recalc_stats and invalid_to_no(query("Recalculate file stats")):
+  recalc_stats = True
 
 if recalc_stats:
   for repo, file_jsons in walked:
     update_basic_stats(config, repo, [fj[0] for fj in file_jsons], recalculate=recalc_stats)
   calculate_license_stats(config, walked)
 
-# for repo, file_jsons in walked:
-#   stats = load_repo_stats(config, repo)
-#   for stat in stats:
-#     print(stat)
-
-from src.git_utils import repo_commit_sha
-from src.utils import reponameless_path
-
-#for repo, file_jsons in walked:
- # blob_prefix = repo.blobs_url.replace("{/sha}", '/' + repo_commit_sha(config, repo)) + '/'
-  #for file_json, _ in file_jsons:
-    #print(blob_prefix + reponameless_path(file_json))
-
 
 conc = _filter_file_conclusive(walked)
+print(f"{len(flatten_removing_repos(conc))} files have conclusive licenses")
 
 from src.filter import filter, new_filter_size, new_filter_line_count, new_filter_unique_hash, filter_has_stats,\
   filter_is_shader
 
-filtered = filter(config, conc, [filter_has_stats, filter_is_shader, new_filter_size(0), new_filter_line_count(0),
-                                 new_filter_unique_hash(config)])
+from collections import OrderedDict
+filters = OrderedDict([
+  ("Have calculated stats", filter_has_stats),
+  ("Are shader files (by extension)", filter_is_shader),
+  (f"Are bigger than {args.filter_size} bytes", new_filter_size(args.filter_size)),
+  (f"Have more than {args.filter_lines} lines", new_filter_line_count(args.filter_lines)),
+  (f"Have unique hash", new_filter_unique_hash(config))
+])
 
-permissive, gpl, nonedet, other = _sort_file_conclusive(config, filtered)
+from src.filter import  FilterBlacklisted
+filtered = filter(config, conc, list(filters.values()), [FilterBlacklisted.Blacklisted])
 
-print(f"permissive: {len(flatten_removing_repos(permissive))}, gpl : {len(flatten_removing_repos(gpl))} "
-      f"None: {len(flatten_removing_repos(nonedet))}, other: {len(flatten_removing_repos(other))}")
+print(f"{len(flatten_removing_repos(filtered))} files:")
+for filter_desc in filters:
+  print(f"- {filter_desc}")
+print("- Not in blacklisted repos")
+
+def report_by_license(walked_):
+  permissive, gpl, nonedet, other = _sort_file_conclusive(config, walked_)
+
+  print(f"permissive: {len(flatten_removing_repos(permissive))}, gpl : {len(flatten_removing_repos(gpl))} "
+        f"None: {len(flatten_removing_repos(nonedet))}, other: {len(flatten_removing_repos(other))}")
+
+print("By license type:")
+report_by_license(filtered)
 
 from src.filter import new_filter_file_extensions, new_filter_platform, new_filter_shader_type, new_no_platform,\
   new_no_shader_type
 
 
 no_platform = filter(config, filtered, [new_no_platform()])
-
+print(f"From these, {len(flatten_removing_repos(no_platform))} files are not associated with any platform (Unity, etc)")
 
 from src.filter import new_filter_selected_licenses, FilterBlacklisted
 from src.config import LicenseGroup
@@ -111,30 +127,29 @@ all_good_licenses = filter(config, no_platform,
                              [LicenseGroup.Permissive, LicenseGroup.GPL, LicenseGroup.NoIncludes],
                              filter_includes=True)],
                            [FilterBlacklisted.Blacklisted])
-from src.analyse_file import calculate_vanilla_compilation_parameters
 
-permissive, gpl, nonedet, other = _sort_file_conclusive(config, all_good_licenses)
+print(f"From these, {len(flatten_removing_repos(all_good_licenses))} files have permissive/gpl licenses,"
+      f" both themselves and includes. Also removed files with missing includes.")
+report_by_license(all_good_licenses)
 
-print(f"permissive: {len(flatten_removing_repos(permissive))}, gpl : {len(flatten_removing_repos(gpl))} "
-      f"None: {len(flatten_removing_repos(nonedet))}, other: {len(flatten_removing_repos(other))}")
+if invalid_to_no(query("(Re)Calculate entry points and compilation targets (will also preprocess)")):
+  compile.preprocess(config, all_good_licenses, only_missing=True)
+  analyse_file.calculate_vanilla_compilation_parameters(config, all_good_licenses)
 
+if invalid_to_no(query("Compile")):
+  compile.compile(config, all_good_licenses, skip_successful=True)
+stats.compilation_stats(config, all_good_licenses)
 
-from src.analyse_file import file_stats
-for repo, file_jsons in all_good_licenses:
-  repo_stats = load_repo_stats(config, repo)
+if invalid_to_no(query("Export base files and stats (Includes compilation data, but also all filtered files)")):
+  analyse_file.mark_compiled(config, all_good_licenses)
+  export.export_base(config, filtered, rlist_variant)
 
-  for file_json, _ in file_jsons:
-    if file_stats(repo_stats, file_json)['hash'] == '82a697181118d6e81a8161fe85b3e2d4618f78c1b6b647926fe14091320b303e':
-      print("Should be here!!")
+if invalid_to_no(query("Decompile to isa")):
+  from src.utils import Decompilers
+  compile.decompile(config, all_good_licenses, [Decompilers.RGA, Decompilers.ISA], skip_successful=True)
+stats.decompilation_stats(config, all_good_licenses)
 
-    if file_stats(repo_stats, file_json)['hash'] == 'be3f29cfb82ea841cbb5f2bf2675161917707db2fa5f20223e3bbd52d1e17b8b' \
-      or file_stats(repo_stats, file_json)['worst_included_license'] \
-      not in [LicenseGroup.Permissive, LicenseGroup.GPL, LicenseGroup.NoIncludes]:
-      print("!! WTF")
-
-from src.utils import Decompilers
-compile.decompile(config, all_good_licenses, [Decompilers.RGA, Decompilers.ISA], skip_successful=True)
-#stats.decompilation_stats(config, all_good_licenses)
-#compile.remove_line_directives(config, all_good_licenses)
-#export.export_isa(config, all_good_licenses)
+if invalid_to_no(query("Export isa pairs")):
+  compile.remove_line_directives(config, all_good_licenses)
+  export.export_isa(config, all_good_licenses)
 

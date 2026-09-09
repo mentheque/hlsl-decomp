@@ -623,8 +623,6 @@ def remove_line_directives(config : Config, walked):
     repo_stats = load_repo_stats(config, repo)
 
     for compiler in _compilers.values():
-      add_directives = _additional_directives(config, repo, CompStep.Preprocessing, compiler.type)
-
       for file_json, _ in file_jsons:
         path = _preprocessed_file_path(config, repo_stats, file_json, compiler.type)
         try:
