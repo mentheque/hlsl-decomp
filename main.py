@@ -141,7 +141,7 @@ if invalid_to_no(query("Compile")):
 stats.compilation_stats(config, all_good_licenses)
 
 if invalid_to_no(query("Export base files and stats (Includes compilation data, but also all filtered files)")):
-  analyse_file.mark_compiled(config, all_good_licenses)
+  analyse_file.mark_compiled(config, filtered)
   export.export_base(config, filtered, rlist_variant)
 
 if invalid_to_no(query("Decompile to isa")):

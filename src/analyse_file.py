@@ -581,7 +581,8 @@ def mark_compiled(config: Config, walked):
   for repo, file_jsons in walked:
     counter = 0
     repo_stats = load_repo_stats(config, repo)
-    repo_meta = meta[repo.full_name]
+
+    repo_meta = meta.setdefault(repo.full_name, {})
     for file_json, _ in file_jsons:
       file_stat = file_stats(repo_stats, file_json)
       file_stat['compiled'] = False

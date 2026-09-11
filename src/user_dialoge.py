@@ -11,7 +11,7 @@ def query(message: str, optionList=None) -> int:
     validAnswers = [str(x) for x in range(0, len(optionList))]
     appendix = "?\n" + '\n'.join([f"{i}: {option}" for i, option in enumerate(optionList)])
 
-  print(message + appendix)
+  print('? ' + message + appendix)
   for i in range(_invalid_answer_limit):
     received = input().lower()
     if received in validAnswers:

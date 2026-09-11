@@ -1,6 +1,6 @@
 {
   "language": "HLSL",
-  "github_token": "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",
+  "github_token": "",
   "target_file_extensions": [
     "hlsl",
     "hlsli",
@@ -151,8 +151,7 @@
     "isa" : {
       "dx11" : [],
       "dx12" : []
-    },
-    "ocloc" : []
+    }
   },
   "decompile_directives" : {
     "rga" : {
